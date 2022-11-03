@@ -13,7 +13,6 @@ use crate::{construct_tag_hash, hash_to_g2};
 pub struct Ciphertext<E: PairingEngine> {
     pub nonce: E::G1Affine,    // U
     pub ciphertext: Vec<u8>,   // V
-    pub aad: Vec<u8>,          // Additional authenticated data
     pub auth_tag: E::G2Affine, // W
 }
 
@@ -60,7 +59,7 @@ pub fn encrypt<R: RngCore, E: PairingEngine>(
     let nonce = Nonce::from_slice(&nonce[..12]);
     let ciphertext = cipher.encrypt(&nonce, message).unwrap();
 
-    let tag = construct_tag_hash::<E>(blinded, &aad[..])
+    let tag = construct_tag_hash::<E>(blinded, &ciphertext, &aad)
         .mul(rand_element)
         .into();
 
@@ -68,15 +67,18 @@ pub fn encrypt<R: RngCore, E: PairingEngine>(
         nonce: blinded,
         ciphertext,
         auth_tag: tag,
-        aad: aad.to_vec(),
     }
 }
 
-pub fn check_ciphertext_validity<E: PairingEngine>(c: &Ciphertext<E>) -> bool {
+pub fn check_ciphertext_validity<E: PairingEngine>(
+    c: &Ciphertext<E>,
+    aad: &[u8],
+) -> bool {
     let g_inv = E::G1Prepared::from(-E::G1Affine::prime_subgroup_generator());
     let hash_g2 = E::G2Prepared::from(construct_tag_hash::<E>(
         c.nonce,
         &c.ciphertext[..],
+        &aad,
     ));
 
     E::product_of_pairings(&[
@@ -95,6 +97,7 @@ pub fn decrypt<E: PairingEngine>(
     )]);
     decrypt_with_shared_secret(ciphertext, &s)
 }
+
 pub fn decrypt_with_shared_secret<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     s: &E::Fqk,

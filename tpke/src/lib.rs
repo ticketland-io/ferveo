@@ -56,10 +56,12 @@ fn hash_to_g2<T: ark_serialize::CanonicalDeserialize>(message: &[u8]) -> T {
 fn construct_tag_hash<E: PairingEngine>(
     u: E::G1Affine,
     stream_ciphertext: &[u8],
+    aad: &[u8],
 ) -> E::G2Affine {
     let mut hash_input = Vec::<u8>::new();
     u.write(&mut hash_input).unwrap();
     hash_input.extend_from_slice(stream_ciphertext);
+    hash_input.extend_from_slice(aad);
 
     hash_to_g2(&hash_input)
 }
@@ -218,5 +220,28 @@ mod tests {
 
         let plaintext = decrypt_with_shared_secret(&ciphertext, &s);
         assert!(plaintext == msg)
+    }
+
+    #[test]
+    fn ciphertext_validity_check() {
+        let mut rng = test_rng();
+        let threshold = 3;
+        let shares_num = 5;
+        let num_entities = 5;
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
+
+        let (pubkey, _privkey, _) =
+            setup::<E>(threshold, shares_num, num_entities);
+
+        let mut ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
+            msg, aad, pubkey, &mut rng,
+        );
+        // So far, the ciphertext is valid
+        assert!(check_ciphertext_validity(&ciphertext, &aad));
+
+        // Malformed the ciphertext
+        ciphertext.ciphertext[0] += 1;
+        assert!(!check_ciphertext_validity(&ciphertext, &aad));
     }
 }
