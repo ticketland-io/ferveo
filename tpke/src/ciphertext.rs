@@ -57,14 +57,14 @@ pub fn encrypt<R: RngCore, E: PairingEngine>(
     let nonce = blinded_to_nonce::<E>(blinded);
     let ciphertext = cipher.encrypt(&nonce, message).unwrap();
 
-    let tag = construct_tag_hash::<E>(blinded, &ciphertext, &aad)
+    let auth_tag = construct_tag_hash::<E>(blinded, &ciphertext, aad)
         .mul(rand_element)
         .into();
 
     Ciphertext::<E> {
         nonce: blinded,
         ciphertext,
-        auth_tag: tag,
+        auth_tag,
     }
 }
 
@@ -76,7 +76,7 @@ pub fn check_ciphertext_validity<E: PairingEngine>(
     let hash_g2 = E::G2Prepared::from(construct_tag_hash::<E>(
         c.nonce,
         &c.ciphertext[..],
-        &aad,
+        aad,
     ));
 
     E::product_of_pairings(&[
@@ -133,7 +133,7 @@ pub fn shared_secret_to_chacha<E: PairingEngine>(
     let mut prf_key_32 = [0u8; 32];
     prf_key_32.clone_from_slice(hasher.finalize().as_bytes());
 
-    ChaCha20Poly1305::new(&GenericArray::from_slice(&prf_key_32))
+    ChaCha20Poly1305::new(GenericArray::from_slice(&prf_key_32))
 }
 
 fn blinded_to_nonce<E: PairingEngine>(nonce: E::G1Affine) -> Nonce {

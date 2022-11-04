@@ -238,10 +238,10 @@ mod tests {
             msg, aad, pubkey, &mut rng,
         );
         // So far, the ciphertext is valid
-        assert!(check_ciphertext_validity(&ciphertext, &aad));
+        assert!(check_ciphertext_validity(&ciphertext, aad));
 
         // Malformed the ciphertext
         ciphertext.ciphertext[0] += 1;
-        assert!(!check_ciphertext_validity(&ciphertext, &aad));
+        assert!(!check_ciphertext_validity(&ciphertext, aad));
     }
 }
