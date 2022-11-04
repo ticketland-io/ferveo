@@ -113,6 +113,18 @@ pub fn decrypt_with_shared_secret<E: PairingEngine>(
     plaintext
 }
 
+pub fn checked_decrypt_with_shared_secret<E: PairingEngine>(
+    ciphertext: &Ciphertext<E>,
+    aad: &[u8],
+    s: &E::Fqk,
+) -> Option<Vec<u8>> {
+    if check_ciphertext_validity(ciphertext, aad) {
+        Some(decrypt_with_shared_secret(ciphertext, s))
+    } else {
+        None
+    }
+}
+
 pub fn shared_secret_to_chacha<E: PairingEngine>(
     s: &E::Fqk,
 ) -> ChaCha20Poly1305 {
