@@ -233,15 +233,19 @@ mod tests {
 
         let (pubkey, _privkey, _) =
             setup::<E>(threshold, shares_num, num_entities);
-
         let mut ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
             msg, aad, pubkey, &mut rng,
         );
+
         // So far, the ciphertext is valid
         assert!(check_ciphertext_validity(&ciphertext, aad));
 
         // Malformed the ciphertext
         ciphertext.ciphertext[0] += 1;
+        assert!(!check_ciphertext_validity(&ciphertext, aad));
+
+        // Malformed the AAD
+        let aad = "bad aad".as_bytes();
         assert!(!check_ciphertext_validity(&ciphertext, aad));
     }
 }

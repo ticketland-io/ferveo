@@ -56,7 +56,7 @@ pub fn encrypt<R: RngCore, E: PairingEngine>(
     let cipher = shared_secret_to_chacha::<E>(&product);
     let nonce = blinded_to_nonce::<E>(blinded);
     let ciphertext = cipher.encrypt(&nonce, message).unwrap();
-
+    // w
     let auth_tag = construct_tag_hash::<E>(blinded, &ciphertext, aad)
         .mul(rand_element)
         .into();
