@@ -54,9 +54,7 @@ pub fn encrypt<R: RngCore, E: PairingEngine>(
     let blinded = g_gen.mul(rand_element).into();
 
     let cipher = shared_secret_to_chacha::<E>(&product);
-    let mut nonce = Vec::new();
-    blinded.serialize_unchecked(&mut nonce).unwrap();
-    let nonce = Nonce::from_slice(&nonce[..12]);
+    let nonce = blinded_to_nonce::<E>(blinded);
     let ciphertext = cipher.encrypt(&nonce, message).unwrap();
 
     let tag = construct_tag_hash::<E>(blinded, &ciphertext, &aad)
@@ -102,13 +100,11 @@ pub fn decrypt_with_shared_secret<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     s: &E::Fqk,
 ) -> Vec<u8> {
-    let mut nonce = Vec::new();
-    ciphertext.nonce.serialize_unchecked(&mut nonce).unwrap();
-    let nonce = Nonce::from_slice(&nonce[..12]);
+    let nonce = blinded_to_nonce::<E>(ciphertext.nonce);
     let ciphertext = ciphertext.ciphertext.to_vec();
 
     let cipher = shared_secret_to_chacha::<E>(s);
-    let plaintext = cipher.decrypt(nonce, ciphertext.as_ref()).unwrap();
+    let plaintext = cipher.decrypt(&nonce, ciphertext.as_ref()).unwrap();
 
     plaintext
 }
@@ -138,4 +134,10 @@ pub fn shared_secret_to_chacha<E: PairingEngine>(
     prf_key_32.clone_from_slice(hasher.finalize().as_bytes());
 
     ChaCha20Poly1305::new(&GenericArray::from_slice(&prf_key_32))
+}
+
+fn blinded_to_nonce<E: PairingEngine>(nonce: E::G1Affine) -> Nonce {
+    let mut nonce_bytes = Vec::new();
+    nonce.serialize_unchecked(&mut nonce_bytes).unwrap();
+    *Nonce::from_slice(&nonce_bytes[..12])
 }
