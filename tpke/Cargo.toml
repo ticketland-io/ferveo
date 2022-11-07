@@ -28,7 +28,7 @@ subproductdomain = { path = "../subproductdomain" }
 chacha20poly1305 = "0.10.1"
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = { version = "0.4", default-features = false }
 
 [[bench]]
 name = "benchmarks"
