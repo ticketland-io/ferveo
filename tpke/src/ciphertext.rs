@@ -114,11 +114,10 @@ pub fn checked_decrypt_with_shared_secret<E: PairingEngine>(
     aad: &[u8],
     s: &E::Fqk,
 ) -> Option<Vec<u8>> {
-    if check_ciphertext_validity(ciphertext, aad) {
-        Some(decrypt_with_shared_secret(ciphertext, s))
-    } else {
-        None
+    if !check_ciphertext_validity(ciphertext, aad) {
+        panic!("Ciphertext is invalid");
     }
+    Some(decrypt_with_shared_secret(ciphertext, s))
 }
 
 pub fn shared_secret_to_chacha<E: PairingEngine>(

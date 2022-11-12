@@ -45,7 +45,6 @@ pub fn bench_decryption(c: &mut Criterion) {
             contexts[0].prepare_combine(&dec_shares[0]);
 
         move || {
-            let _c: Vec<Ciphertext<E>> = ciphertexts.clone();
             let shares: Vec<Vec<DecryptionShare<E>>> = dec_shares.clone();
 
             for i in 0..ciphertexts.len() {
