@@ -218,7 +218,8 @@ mod tests {
         let s =
             contexts[0].share_combine(&shares, &prepared_blinded_key_shares);
 
-        let plaintext = decrypt_with_shared_secret(&ciphertext, &s);
+        let plaintext =
+            checked_decrypt_with_shared_secret(&ciphertext, aad, &s);
         assert!(plaintext == msg)
     }
 

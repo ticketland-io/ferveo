@@ -96,7 +96,7 @@ pub fn decrypt<E: PairingEngine>(
     decrypt_with_shared_secret(ciphertext, &s)
 }
 
-pub fn decrypt_with_shared_secret<E: PairingEngine>(
+fn decrypt_with_shared_secret<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     s: &E::Fqk,
 ) -> Vec<u8> {
@@ -113,11 +113,11 @@ pub fn checked_decrypt_with_shared_secret<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     aad: &[u8],
     s: &E::Fqk,
-) -> Option<Vec<u8>> {
+) -> Vec<u8> {
     if !check_ciphertext_validity(ciphertext, aad) {
         panic!("Ciphertext is invalid");
     }
-    Some(decrypt_with_shared_secret(ciphertext, s))
+    decrypt_with_shared_secret(ciphertext, s)
 }
 
 fn blake2s_hash(input: &[u8]) -> Vec<u8> {
