@@ -15,7 +15,6 @@ use thiserror::Error;
 
 mod ciphertext;
 mod hash_to_curve;
-mod serialization;
 pub use ciphertext::*;
 mod key_share;
 pub use key_share::*;
@@ -25,6 +24,8 @@ mod combine;
 pub use combine::*;
 mod context;
 pub use context::*;
+// TODO: Turn into a crate feature
+pub mod serialization;
 
 pub trait ThresholdEncryptionParameters {
     type E: PairingEngine;

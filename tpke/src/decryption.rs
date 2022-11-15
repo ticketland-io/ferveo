@@ -20,13 +20,18 @@ impl<E: PairingEngine> DecryptionShare<E> {
         bytes.extend(&decrypter_index);
         CanonicalSerialize::serialize(&self.decryption_share, &mut bytes)
             .unwrap();
+
         bytes
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        let decrypter_index = bincode::deserialize(&bytes[0..8]).unwrap();
+        let INDEX_BYTE_LEN = 8;
+        let decrypter_index =
+            bincode::deserialize(&bytes[0..INDEX_BYTE_LEN]).unwrap();
         let decryption_share =
-            CanonicalDeserialize::deserialize(&bytes[8..]).unwrap();
+            CanonicalDeserialize::deserialize(&bytes[INDEX_BYTE_LEN..])
+                .unwrap();
+
         DecryptionShare {
             decrypter_index,
             decryption_share,

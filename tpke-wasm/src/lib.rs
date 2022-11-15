@@ -1,4 +1,3 @@
-mod serialization;
 mod utils;
 
 extern crate group_threshold_cryptography as tpke;
@@ -31,10 +30,13 @@ pub struct PrivateDecryptionContext {
     decrypter_index: usize,
 }
 
-impl PrivateDecryptionContext {
-    const B_INV_LEN: usize = 32;
-    const DECRYPTER_INDEX_LEN: usize = 8;
+// Keeping this out of the `PrivateDecryptionContext`, since wasm_bindgen doesn't
+// support constant field definitions.
+const B_INV_LEN: usize = 32;
+const DECRYPTER_INDEX_LEN: usize = 8;
 
+#[wasm_bindgen]
+impl PrivateDecryptionContext {
     pub(crate) fn new(
         b_inv: ark_bls12_381::Fr,
         decrypter_index: usize,
@@ -45,10 +47,11 @@ impl PrivateDecryptionContext {
         }
     }
 
-    pub fn serialized_size() -> usize {
-        Self::B_INV_LEN + Self::DECRYPTER_INDEX_LEN
+    pub(crate) fn serialized_size() -> usize {
+        B_INV_LEN + DECRYPTER_INDEX_LEN
     }
 
+    #[wasm_bindgen]
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         self.b_inv.0.write(&mut bytes).unwrap();
@@ -60,8 +63,10 @@ impl PrivateDecryptionContext {
         bytes
     }
 
+    #[wasm_bindgen]
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        let b_inv_bytes = &bytes[0..Self::B_INV_LEN];
+        let b_inv_bytes = &bytes[0..B_INV_LEN];
+        // Chunking bytes to u64s to construct a BigInteger256.
         let b_inv = b_inv_bytes
             .chunks(8)
             .map(|x| {
@@ -73,8 +78,8 @@ impl PrivateDecryptionContext {
         let b_inv: [u64; 4] = b_inv.try_into().unwrap();
         let b_inv = ark_bls12_381::Fr::new(BigInteger256::new(b_inv));
 
-        let decrypter_index_bytes = &bytes
-            [Self::B_INV_LEN..Self::B_INV_LEN + Self::DECRYPTER_INDEX_LEN];
+        let decrypter_index_bytes =
+            &bytes[B_INV_LEN..B_INV_LEN + DECRYPTER_INDEX_LEN];
         let decrypter_index =
             bincode::deserialize(decrypter_index_bytes).unwrap();
 
@@ -107,10 +112,13 @@ impl DecryptionShare {
 #[derive(Clone, Debug)]
 pub struct ParticipantPayload {
     decryption_context: PrivateDecryptionContext,
+    // Using inner type here because `ciphertext` is never accessed from the outside.
     ciphertext: TpkeCiphertext,
 }
 
+#[wasm_bindgen]
 impl ParticipantPayload {
+    #[wasm_bindgen(constructor)]
     pub fn new(
         decryption_context: PrivateDecryptionContext,
         ciphertext: Ciphertext,
@@ -121,12 +129,14 @@ impl ParticipantPayload {
         }
     }
 
+    #[wasm_bindgen]
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = self.decryption_context.to_bytes();
         bytes.extend(&self.ciphertext.to_bytes());
         bytes
     }
 
+    #[wasm_bindgen]
     pub fn from_bytes(bytes: &[u8]) -> Self {
         let decryption_context_bytes =
             &bytes[0..PrivateDecryptionContext::serialized_size()];
@@ -143,9 +153,9 @@ impl ParticipantPayload {
         }
     }
 
+    #[wasm_bindgen]
     pub fn to_decryption_share(&self) -> DecryptionShare {
         // TODO: Add verification steps
-
         let decryption_share = self
             .ciphertext
             .nonce
@@ -163,16 +173,19 @@ impl ParticipantPayload {
 #[wasm_bindgen]
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct PublicKey(
-    #[serde_as(as = "serialization::SerdeAs")] pub(crate) TpkePublicKey,
+    #[serde_as(as = "tpke::serialization::SerdeAs")] pub(crate) TpkePublicKey,
 );
 
+#[wasm_bindgen]
 impl PublicKey {
+    #[wasm_bindgen]
     pub fn from_bytes(bytes: &[u8]) -> Self {
         let mut reader = bytes;
         let pk = TpkePublicKey::deserialize_uncompressed(&mut reader).unwrap();
         PublicKey(pk)
     }
 
+    #[wasm_bindgen]
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         self.0.serialize_uncompressed(&mut bytes).unwrap();
@@ -183,16 +196,19 @@ impl PublicKey {
 #[wasm_bindgen]
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct PrivateKey(
-    #[serde_as(as = "serialization::SerdeAs")] pub(crate) TpkePrivateKey,
+    #[serde_as(as = "tpke::serialization::SerdeAs")] pub(crate) TpkePrivateKey,
 );
 
+#[wasm_bindgen]
 impl PrivateKey {
+    #[wasm_bindgen]
     pub fn from_bytes(bytes: &[u8]) -> Self {
         let mut reader = bytes;
         let pk = TpkePrivateKey::deserialize_uncompressed(&mut reader).unwrap();
         PrivateKey(pk)
     }
 
+    #[wasm_bindgen]
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         self.0.serialize_uncompressed(&mut bytes).unwrap();
@@ -239,6 +255,7 @@ impl Setup {
     // as a workaround for wasm-bindgen not supporting `Vec` with a custom defined types without serde
     // serialization.
 
+    #[wasm_bindgen]
     pub fn private_context_at(&self, index: usize) -> PrivateDecryptionContext {
         set_panic_hook();
         let context = self.private_contexts[index].clone();
@@ -246,6 +263,7 @@ impl Setup {
         context
     }
 
+    #[wasm_bindgen]
     pub fn decrypter_indexes(&self) -> Vec<usize> {
         set_panic_hook();
         self.private_contexts
@@ -284,6 +302,7 @@ pub struct SharedSecretBuilder {
     shares: Vec<TpkeDecryptionShare>,
     contexts: Vec<TpkePublicDecryptionContext>,
 }
+
 #[wasm_bindgen]
 impl SharedSecretBuilder {
     #[wasm_bindgen(constructor)]
