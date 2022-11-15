@@ -15,6 +15,7 @@ use thiserror::Error;
 
 mod ciphertext;
 mod hash_to_curve;
+mod serialization;
 pub use ciphertext::*;
 mod key_share;
 pub use key_share::*;
@@ -173,6 +174,40 @@ mod tests {
     type E = ark_bls12_381::Bls12_381;
 
     #[test]
+    fn ciphertext_serialization() {
+        let mut rng = test_rng();
+        let threshold = 3;
+        let shares_num = 5;
+        let num_entities = 5;
+        let msg: &[u8] = "abc".as_bytes();
+
+        let (pubkey, _privkey, _) =
+            setup::<E>(threshold, shares_num, num_entities);
+
+        let ciphertext =
+            encrypt::<ark_std::rand::rngs::StdRng, E>(msg, pubkey, &mut rng);
+
+        let serialized = ciphertext.to_bytes();
+        let deserialized: Ciphertext<E> = Ciphertext::from_bytes(&serialized);
+
+        assert!(serialized == deserialized.to_bytes())
+    }
+
+    #[test]
+    fn decryption_share_serialization() {
+        let decryption_share = DecryptionShare::<E> {
+            decrypter_index: 1,
+            decryption_share: ark_bls12_381::G1Affine::prime_subgroup_generator(
+            ),
+        };
+
+        let serialized = decryption_share.to_bytes();
+        let deserialized: DecryptionShare<E> =
+            DecryptionShare::from_bytes(&serialized);
+        assert_eq!(serialized, deserialized.to_bytes())
+    }
+
+    #[test]
     fn symmetric_encryption() {
         let mut rng = test_rng();
         let threshold = 3;
@@ -189,7 +224,7 @@ mod tests {
         );
         let plaintext = decrypt(&ciphertext, privkey);
 
-        assert!(msg == plaintext)
+        assert_eq!(msg, plaintext)
     }
 
     // Source: https://stackoverflow.com/questions/26469715/how-do-i-write-a-rust-unit-test-that-ensures-that-a-panic-has-occurred
@@ -222,19 +257,20 @@ mod tests {
         for context in contexts.iter() {
             shares.push(context.create_share(&ciphertext));
         }
+
         /*for pub_context in contexts[0].public_decryption_contexts.iter() {
             assert!(pub_context
                 .blinded_key_shares
                 .verify_blinding(&pub_context.public_key_shares, rng));
         }*/
-        let prepared_blinded_key_shares = contexts[0].prepare_combine(&shares);
-        let s =
-            contexts[0].share_combine(&shares, &prepared_blinded_key_shares);
+        let prepared_blinded_key_shares =
+            prepare_combine(&contexts[0].public_decryption_contexts, &shares);
+        let s = share_combine(&shares, &prepared_blinded_key_shares);
 
         // So far, the ciphertext is valid
         let plaintext =
             checked_decrypt_with_shared_secret(&ciphertext, aad, &s);
-        assert!(plaintext == msg);
+        assert_eq!(plaintext, msg);
 
         // Malformed the ciphertext
         ciphertext.ciphertext[0] += 1;

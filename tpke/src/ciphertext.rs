@@ -1,3 +1,5 @@
+use crate::*;
+
 use ark_ec::{AffineCurve, PairingEngine};
 use ark_ff::{FromBytes, One, ToBytes, UniformRand};
 use ark_serialize::CanonicalSerialize;
@@ -12,8 +14,8 @@ use crate::{construct_tag_hash, hash_to_g2};
 #[derive(Clone, Debug)]
 pub struct Ciphertext<E: PairingEngine> {
     pub commitment: E::G1Affine, // U
-    pub ciphertext: Vec<u8>,     // V
-    pub auth_tag: E::G2Affine,   // W
+    pub auth_tag: E::G2Affine, // W
+    pub ciphertext: Vec<u8>,   // V
 }
 
 impl<E: PairingEngine> Ciphertext<E> {
@@ -37,8 +39,8 @@ impl<E: PairingEngine> Ciphertext<E> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         self.nonce.write(&mut bytes).unwrap();
-        bytes.extend_from_slice(&self.ciphertext);
         self.auth_tag.write(&mut bytes).unwrap();
+        bytes.extend_from_slice(&self.ciphertext);
         bytes
     }
 
@@ -48,18 +50,19 @@ impl<E: PairingEngine> Ciphertext<E> {
         nonce_bytes.copy_from_slice(&bytes[..NONCE_LEN]);
         let nonce = E::G1Affine::read(&nonce_bytes[..]).unwrap();
 
-        const CIPHERTEXT_LEN: usize = 33;
-        let ciphertext = bytes[NONCE_LEN..NONCE_LEN + CIPHERTEXT_LEN].to_vec();
-
         const AUTH_TAG_LEN: usize = 193;
         let mut auth_tag_bytes = [0u8; AUTH_TAG_LEN];
-        auth_tag_bytes.copy_from_slice(&bytes[bytes.len() - AUTH_TAG_LEN..]);
+        auth_tag_bytes
+            .copy_from_slice(&bytes[NONCE_LEN..NONCE_LEN + AUTH_TAG_LEN]);
         let auth_tag = E::G2Affine::read(&auth_tag_bytes[..]).unwrap();
+
+        const CIPHERTEXT_LEN: usize = 33;
+        let ciphertext = bytes[NONCE_LEN + AUTH_TAG_LEN..].to_vec();
 
         Self {
             nonce,
-            ciphertext,
             auth_tag,
+            ciphertext,
         }
     }
 }

@@ -41,19 +41,19 @@ pub fn bench_decryption(c: &mut Criterion) {
                 dec_shares[j].push(ctx.create_share(&ciphertexts[j]));
             }
         }
-        let prepared_blinded_key_shares =
-            contexts[0].prepare_combine(&dec_shares[0]);
+        let prepared_blinded_key_shares = prepare_combine(
+            &contexts[0].public_decryption_contexts,
+            &dec_shares[0],
+        );
 
         move || {
             let shares: Vec<Vec<DecryptionShare<E>>> = dec_shares.clone();
 
             for i in 0..ciphertexts.len() {
-                black_box(
-                    contexts[0].share_combine(
-                        &shares[i],
-                        &prepared_blinded_key_shares,
-                    ),
-                );
+                black_box(share_combine(
+                    &shares[i],
+                    &prepared_blinded_key_shares,
+                ));
             }
         }
     }
@@ -98,16 +98,16 @@ pub fn bench_decryption(c: &mut Criterion) {
             let shares: Vec<Vec<DecryptionShare<E>>> = dec_shares.clone();
 
             contexts[0].batch_verify_decryption_shares(&c, &shares, rng);
-            let prepared_blinded_key_shares =
-                contexts[0].prepare_combine(&dec_shares[0]);
+            let prepared_blinded_key_shares = prepare_combine(
+                &contexts[0].public_decryption_contexts,
+                &dec_shares[0],
+            );
 
             for i in 0..ciphertexts.len() {
-                black_box(
-                    contexts[0].share_combine(
-                        &shares[i],
-                        &prepared_blinded_key_shares,
-                    ),
-                );
+                black_box(share_combine(
+                    &shares[i],
+                    &prepared_blinded_key_shares,
+                ));
             }
         }
     }

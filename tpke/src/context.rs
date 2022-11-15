@@ -9,7 +9,7 @@ pub struct PublicDecryptionContext<E: PairingEngine> {
     pub lagrange_n_0: E::Fr,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PrivateDecryptionContext<E: PairingEngine> {
     pub index: usize,
     pub b: E::Fr,
