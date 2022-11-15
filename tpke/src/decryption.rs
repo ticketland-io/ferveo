@@ -3,12 +3,10 @@
 
 use crate::*;
 use ark_ec::ProjectiveCurve;
-use ark_serialize::CanonicalDeserialize;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DecryptionShare<E: PairingEngine> {
-    pub decrypter_index: usize,
+    pub decryptor_index: usize,
     pub decryption_share: E::G1Affine,
 }
 
@@ -66,7 +64,7 @@ impl<E: PairingEngine> PrivateDecryptionContext<E> {
         let blinding_keys = shares[0]
             .iter()
             .map(|d| {
-                self.public_decryption_contexts[d.decrypter_index]
+                self.public_decryption_contexts[d.decryptor_index]
                     .blinded_key_shares
                     .blinding_key_prepared
                     .clone()

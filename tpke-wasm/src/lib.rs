@@ -2,11 +2,7 @@ mod utils;
 
 extern crate group_threshold_cryptography as tpke;
 
-use ark_ec::{AffineCurve, ProjectiveCurve};
-use ark_ff::{BigInteger256, ToBytes};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
+use ark_ff::{FromBytes, ToBytes};
 use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;
 
@@ -296,7 +292,7 @@ pub fn encrypt(
 }
 
 #[wasm_bindgen]
-pub fn decrypt(ciphertext: Ciphertext, private_key: PrivateKey) -> Vec<u8> {
+pub fn decrypt(ciphertext: Vec<u8>, privkey: Vec<u8>) -> Vec<u8> {
     set_panic_hook();
 
     tpke::checked_decrypt(

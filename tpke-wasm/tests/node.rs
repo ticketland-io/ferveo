@@ -31,14 +31,16 @@ pub fn participant_payload_serialization() {
 
 #[test]
 #[wasm_bindgen_test]
-fn symmetric_encryption() {
+fn encrypts_and_decrypts() {
     let threshold = 3;
     let shares_num = 5;
     let num_entities = 5;
     let message = "my-secret-message".as_bytes().to_vec();
     let aad = "my-aad".as_bytes().to_vec();
 
-    let setup = Setup::new(threshold, shares_num, num_entities);
+    let setup_result = setup(threshold, shares_num, num_entities);
+    let public_key = setup_result.public_key().to_vec();
+    let private_key = setup_result.private_key().to_vec();
 
     let ciphertext = encrypt(message.clone(), aad, setup.public_key);
     let plaintext = decrypt(ciphertext, setup.private_key);
