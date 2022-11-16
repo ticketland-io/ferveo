@@ -6,8 +6,6 @@ use ark_ff::{FromBytes, ToBytes};
 use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;
 
-extern crate alloc;
-// Use `wee_alloc` as the global allocator.
 extern crate wee_alloc;
 
 pub type E = ark_bls12_381::Bls12_381;
