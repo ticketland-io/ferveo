@@ -51,7 +51,7 @@ pub fn setup_dkg(
             retry_after: 1,
         },
         me,
-        keypairs[validator].clone(),
+        keypairs[validator],
     )
     .expect("Setup failed")
 }

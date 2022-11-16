@@ -14,7 +14,8 @@ impl<E: PairingEngine> PrivateDecryptionContext<E> {
         &self,
         ciphertext: &Ciphertext<E>,
     ) -> DecryptionShare<E> {
-        let decryption_share = ciphertext.nonce.mul(self.b_inv).into_affine();
+        let decryption_share =
+            ciphertext.commitment.mul(self.b_inv).into_affine();
 
         DecryptionShare {
             decryptor_index: self.index,
@@ -58,7 +59,7 @@ impl<E: PairingEngine> PrivateDecryptionContext<E> {
         // Compute \sum_j [ \sum_i \alpha_{i,j} ] U_j
         let sum_u_j = E::G1Prepared::from(
             izip!(ciphertexts.iter(), sum_alpha_i.iter())
-                .map(|(c, alpha_j)| c.nonce.mul(*alpha_j))
+                .map(|(c, alpha_j)| c.commitment.mul(*alpha_j))
                 .sum::<E::G1Projective>()
                 .into_affine(),
         );

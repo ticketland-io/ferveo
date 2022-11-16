@@ -175,14 +175,12 @@ impl<E: PairingEngine> PubliclyVerifiableDkg<E> {
                     Err(
                         anyhow!("Aggregation failed because the verified weight was insufficient")
                     )
+                } else if &self.final_key() == final_key {
+                    Ok(())
                 } else {
-                    if &self.final_key() == final_key {
-                        Ok(())
-                    } else {
-                        Err(
-                            anyhow!("The final key was not correctly derived from the aggregated transcripts")
-                        )
-                    }
+                    Err(
+                        anyhow!("The final key was not correctly derived from the aggregated transcripts")
+                    )
                 }
             }
             _ => Err(anyhow!("DKG state machine is not in correct state to verify this message"))
@@ -298,7 +296,7 @@ pub(crate) mod test_common {
                 retry_after: 2,
             },
             me,
-            keypairs[validator].clone(),
+            keypairs[validator],
         )
         .expect("Setup failed")
     }

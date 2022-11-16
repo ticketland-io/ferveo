@@ -56,10 +56,12 @@ fn hash_to_g2<T: ark_serialize::CanonicalDeserialize>(message: &[u8]) -> T {
 fn construct_tag_hash<E: PairingEngine>(
     u: E::G1Affine,
     stream_ciphertext: &[u8],
+    aad: &[u8],
 ) -> E::G2Affine {
     let mut hash_input = Vec::<u8>::new();
     u.write(&mut hash_input).unwrap();
     hash_input.extend_from_slice(stream_ciphertext);
+    hash_input.extend_from_slice(aad);
 
     hash_to_g2(&hash_input)
 }
@@ -176,17 +178,31 @@ mod tests {
         let threshold = 3;
         let shares_num = 5;
         let num_entities = 5;
-
         let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, privkey, _) =
             setup::<E>(threshold, shares_num, num_entities);
 
-        let ciphertext =
-            encrypt::<ark_std::rand::rngs::StdRng, E>(msg, pubkey, &mut rng);
+        let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
+            msg, aad, pubkey, &mut rng,
+        );
         let plaintext = decrypt(&ciphertext, privkey);
 
         assert!(msg == plaintext)
+    }
+
+    // Source: https://stackoverflow.com/questions/26469715/how-do-i-write-a-rust-unit-test-that-ensures-that-a-panic-has-occurred
+    // TODO: Remove after adding proper error handling to the library
+    use std::panic;
+    fn catch_unwind_silent<F: FnOnce() -> R + panic::UnwindSafe, R>(
+        f: F,
+    ) -> std::thread::Result<R> {
+        let prev_hook = panic::take_hook();
+        panic::set_hook(Box::new(|_| {}));
+        let result = panic::catch_unwind(f);
+        panic::set_hook(prev_hook);
+        result
     }
 
     #[test]
@@ -196,10 +212,11 @@ mod tests {
         let shares_num = 16;
         let num_entities = 5;
         let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, _privkey, contexts) =
             setup::<E>(threshold, shares_num, num_entities);
-        let ciphertext = encrypt::<_, E>(msg, pubkey, rng);
+        let mut ciphertext = encrypt::<_, E>(msg, aad, pubkey, rng);
 
         let mut shares: Vec<DecryptionShare<E>> = vec![];
         for context in contexts.iter() {
@@ -214,7 +231,50 @@ mod tests {
         let s =
             contexts[0].share_combine(&shares, &prepared_blinded_key_shares);
 
-        let plaintext = decrypt_with_shared_secret(&ciphertext, &s);
-        assert!(plaintext == msg)
+        // So far, the ciphertext is valid
+        let plaintext =
+            checked_decrypt_with_shared_secret(&ciphertext, aad, &s);
+        assert!(plaintext == msg);
+
+        // Malformed the ciphertext
+        ciphertext.ciphertext[0] += 1;
+        let result = std::panic::catch_unwind(|| {
+            checked_decrypt_with_shared_secret(&ciphertext, aad, &s)
+        });
+        assert!(result.is_err());
+
+        // Malformed the AAD
+        let aad = "bad aad".as_bytes();
+        let result = std::panic::catch_unwind(|| {
+            checked_decrypt_with_shared_secret(&ciphertext, aad, &s)
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn ciphertext_validity_check() {
+        let mut rng = test_rng();
+        let threshold = 3;
+        let shares_num = 5;
+        let num_entities = 5;
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
+
+        let (pubkey, _privkey, _) =
+            setup::<E>(threshold, shares_num, num_entities);
+        let mut ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
+            msg, aad, pubkey, &mut rng,
+        );
+
+        // So far, the ciphertext is valid
+        assert!(check_ciphertext_validity(&ciphertext, aad));
+
+        // Malformed the ciphertext
+        ciphertext.ciphertext[0] += 1;
+        assert!(!check_ciphertext_validity(&ciphertext, aad));
+
+        // Malformed the AAD
+        let aad = "bad aad".as_bytes();
+        assert!(!check_ciphertext_validity(&ciphertext, aad));
     }
 }

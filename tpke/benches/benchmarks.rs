@@ -15,6 +15,7 @@ pub fn bench_decryption(c: &mut Criterion) {
         msg_size: usize,
     ) -> impl Fn() {
         let rng = &mut rand::rngs::StdRng::seed_from_u64(0);
+        let aad: &[u8] = "my-aad".as_bytes();
 
         type E = ark_bls12_381::Bls12_381;
         let threshold = num_shares * 2 / 3;
@@ -33,7 +34,7 @@ pub fn bench_decryption(c: &mut Criterion) {
             rng.fill_bytes(&mut msg[..]);
             messages.push(msg.clone());
 
-            ciphertexts.push(encrypt::<_, E>(&messages[j], pubkey, rng));
+            ciphertexts.push(encrypt::<_, E>(&messages[j], aad, pubkey, rng));
 
             dec_shares.push(Vec::with_capacity(threshold));
             for ctx in contexts.iter().take(num_entities) {
@@ -44,7 +45,6 @@ pub fn bench_decryption(c: &mut Criterion) {
             contexts[0].prepare_combine(&dec_shares[0]);
 
         move || {
-            let c: Vec<Ciphertext<E>> = ciphertexts.clone();
             let shares: Vec<Vec<DecryptionShare<E>>> = dec_shares.clone();
 
             for i in 0..ciphertexts.len() {
@@ -65,6 +65,7 @@ pub fn bench_decryption(c: &mut Criterion) {
         msg_size: usize,
     ) -> impl Fn() {
         let rng = &mut rand::rngs::StdRng::seed_from_u64(0);
+        let aad: &[u8] = "my-aad".as_bytes();
 
         type E = ark_bls12_381::Bls12_381;
         let threshold = num_shares * 2 / 3;
@@ -83,7 +84,7 @@ pub fn bench_decryption(c: &mut Criterion) {
             rng.fill_bytes(&mut msg);
             messages.push(msg.clone());
 
-            ciphertexts.push(encrypt::<_, E>(&messages[j], pubkey, rng));
+            ciphertexts.push(encrypt::<_, E>(&messages[j], aad, pubkey, rng));
 
             dec_shares.push(Vec::with_capacity(threshold));
             for ctx in contexts.iter().take(num_entities) {
