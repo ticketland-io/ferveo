@@ -192,6 +192,19 @@ mod tests {
         assert!(msg == plaintext)
     }
 
+    // Source: https://stackoverflow.com/questions/26469715/how-do-i-write-a-rust-unit-test-that-ensures-that-a-panic-has-occurred
+    // TODO: Remove after adding proper error handling to the library
+    use std::panic;
+    fn catch_unwind_silent<F: FnOnce() -> R + panic::UnwindSafe, R>(
+        f: F,
+    ) -> std::thread::Result<R> {
+        let prev_hook = panic::take_hook();
+        panic::set_hook(Box::new(|_| {}));
+        let result = panic::catch_unwind(f);
+        panic::set_hook(prev_hook);
+        result
+    }
+
     #[test]
     fn threshold_encryption() {
         let rng = &mut test_rng();
@@ -203,7 +216,7 @@ mod tests {
 
         let (pubkey, _privkey, contexts) =
             setup::<E>(threshold, shares_num, num_entities);
-        let ciphertext = encrypt::<_, E>(msg, aad, pubkey, rng);
+        let mut ciphertext = encrypt::<_, E>(msg, aad, pubkey, rng);
 
         let mut shares: Vec<DecryptionShare<E>> = vec![];
         for context in contexts.iter() {
@@ -218,9 +231,24 @@ mod tests {
         let s =
             contexts[0].share_combine(&shares, &prepared_blinded_key_shares);
 
+        // So far, the ciphertext is valid
         let plaintext =
             checked_decrypt_with_shared_secret(&ciphertext, aad, &s);
-        assert!(plaintext == msg)
+        assert!(plaintext == msg);
+
+        // Malformed the ciphertext
+        ciphertext.ciphertext[0] += 1;
+        let result = std::panic::catch_unwind(|| {
+            checked_decrypt_with_shared_secret(&ciphertext, aad, &s)
+        });
+        assert!(result.is_err());
+
+        // Malformed the AAD
+        let aad = "bad aad".as_bytes();
+        let result = std::panic::catch_unwind(|| {
+            checked_decrypt_with_shared_secret(&ciphertext, aad, &s)
+        });
+        assert!(result.is_err());
     }
 
     #[test]

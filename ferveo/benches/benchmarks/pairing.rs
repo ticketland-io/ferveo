@@ -21,9 +21,7 @@ pub fn lagrange(c: &mut Criterion) {
         b.iter(|| {
             black_box(
                 subproductdomain::SubproductDomain::<Fr>::new(u.clone())
-                    .inverse_lagrange_coefficients(), //.iter()
-                                                      //.map(|x| x.inverse())
-                                                      //.collect::<Vec<_>>(),
+                    .inverse_lagrange_coefficients(),
             )
         })
     });
@@ -41,9 +39,7 @@ pub fn lagrange(c: &mut Criterion) {
                 subproductdomain::SubproductDomain::<jubjub::Fr>::new(
                     u.clone(),
                 )
-                .inverse_lagrange_coefficients(), //.iter()
-                                                  //.map(|x| x.inverse())
-                                                  //.collect::<Vec<_>>(),
+                .inverse_lagrange_coefficients(),
             )
         })
     });

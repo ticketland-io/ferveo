@@ -54,7 +54,7 @@ pub fn encrypt<R: RngCore, E: PairingEngine>(
     let commitment = g_gen.mul(rand_element).into();
 
     let cipher = shared_secret_to_chacha::<E>(&product);
-    let nonce = commitment_to_nonce::<E>(commitment);
+    let nonce = nonce_from_commitment::<E>(commitment);
     let ciphertext = cipher.encrypt(&nonce, message).unwrap();
     // w
     let auth_tag = construct_tag_hash::<E>(commitment, &ciphertext, aad)
@@ -100,7 +100,7 @@ fn decrypt_with_shared_secret<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     s: &E::Fqk,
 ) -> Vec<u8> {
-    let nonce = commitment_to_nonce::<E>(ciphertext.commitment);
+    let nonce = nonce_from_commitment::<E>(ciphertext.commitment);
     let ciphertext = ciphertext.ciphertext.to_vec();
 
     let cipher = shared_secret_to_chacha::<E>(s);
@@ -136,7 +136,7 @@ pub fn shared_secret_to_chacha<E: PairingEngine>(
     ChaCha20Poly1305::new(GenericArray::from_slice(&prf_key_32))
 }
 
-fn commitment_to_nonce<E: PairingEngine>(commitment: E::G1Affine) -> Nonce {
+fn nonce_from_commitment<E: PairingEngine>(commitment: E::G1Affine) -> Nonce {
     let mut commitment_bytes = Vec::new();
     commitment
         .serialize_unchecked(&mut commitment_bytes)
