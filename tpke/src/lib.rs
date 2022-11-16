@@ -5,7 +5,7 @@ use ark_ec::{msm::FixedBaseMSM, AffineCurve, PairingEngine};
 use ark_ff::{Field, One, PrimeField, ToBytes, UniformRand, Zero};
 use ark_poly::EvaluationDomain;
 use ark_poly::{univariate::DensePolynomial, UVPolynomial};
-use ark_serialize::CanonicalSerialize;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::izip;
 use subproductdomain::SubproductDomain;
 

@@ -38,9 +38,7 @@ fn encrypts_and_decrypts() {
     let message = "my-secret-message".as_bytes().to_vec();
     let aad = "my-aad".as_bytes().to_vec();
 
-    let setup_result = setup(threshold, shares_num, num_entities);
-    let public_key = setup_result.public_key().to_vec();
-    let private_key = setup_result.private_key().to_vec();
+    let setup = Setup::new(threshold, shares_num, num_entities);
 
     let ciphertext = encrypt(message.clone(), aad, setup.public_key);
     let plaintext = decrypt(ciphertext, setup.private_key);

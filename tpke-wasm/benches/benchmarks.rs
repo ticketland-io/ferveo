@@ -7,10 +7,12 @@ pub fn bench_encrypt_combine(c: &mut Criterion) {
         threshold: usize,
     ) -> impl Fn() {
         let message = "my-secret-message".as_bytes().to_vec();
+        let aad = "my-aad".as_bytes().to_vec();
         let setup = tpke_wasm::Setup::new(threshold, num_shares, num_entities);
         move || {
             let message = message.clone();
-            black_box(tpke_wasm::encrypt(message, setup.public_key));
+            let aad = aad.clone();
+            black_box(tpke_wasm::encrypt(message, aad, setup.public_key));
         }
     }
 
