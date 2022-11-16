@@ -181,12 +181,14 @@ mod tests {
         let shares_num = 5;
         let num_entities = 5;
         let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "aad".as_bytes();
 
         let (pubkey, _privkey, _) =
             setup::<E>(threshold, shares_num, num_entities);
 
-        let ciphertext =
-            encrypt::<ark_std::rand::rngs::StdRng, E>(msg, pubkey, &mut rng);
+        let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
+            msg, aad, pubkey, &mut rng,
+        );
 
         let serialized = ciphertext.to_bytes();
         let deserialized: Ciphertext<E> = Ciphertext::from_bytes(&serialized);
@@ -223,7 +225,7 @@ mod tests {
         let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
             msg, aad, pubkey, &mut rng,
         );
-        let plaintext = decrypt(&ciphertext, privkey);
+        let plaintext = checked_decrypt(&ciphertext, aad, privkey);
 
         assert_eq!(msg, plaintext)
     }

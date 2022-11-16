@@ -125,7 +125,7 @@ impl ParticipantPayload {
     ) -> Self {
         ParticipantPayload {
             decryption_context,
-            ciphertext: ciphertext.0,
+            ciphertext: ciphertext.ciphertext,
         }
     }
 
@@ -158,7 +158,7 @@ impl ParticipantPayload {
         // TODO: Add verification steps
         let decryption_share = self
             .ciphertext
-            .nonce
+            .commitment
             .mul(self.decryption_context.b_inv)
             .into_affine();
 
@@ -275,21 +275,34 @@ impl Setup {
 
 #[wasm_bindgen]
 #[derive(Clone, Debug)]
-pub struct Ciphertext(pub(crate) TpkeCiphertext);
+pub struct Ciphertext {
+    pub(crate) ciphertext: TpkeCiphertext,
+    pub(crate) aad: Vec<u8>,
+}
 
 #[wasm_bindgen]
-pub fn encrypt(message: Vec<u8>, public_key: PublicKey) -> Ciphertext {
+pub fn encrypt(
+    message: Vec<u8>,
+    aad: Vec<u8>,
+    public_key: PublicKey,
+) -> Ciphertext {
     set_panic_hook();
 
     let mut rng = rand::thread_rng();
-    let ciphertext = tpke::encrypt::<_, E>(&message, public_key.0, &mut rng);
-    Ciphertext(ciphertext)
+    let ciphertext =
+        tpke::encrypt::<_, E>(&message, &aad, public_key.0, &mut rng);
+    Ciphertext { ciphertext, aad }
 }
 
 #[wasm_bindgen]
 pub fn decrypt(ciphertext: Ciphertext, private_key: PrivateKey) -> Vec<u8> {
     set_panic_hook();
-    tpke::decrypt(&ciphertext.0, private_key.0)
+
+    tpke::checked_decrypt(
+        &ciphertext.ciphertext,
+        &ciphertext.aad,
+        private_key.0,
+    )
 }
 
 #[wasm_bindgen]
@@ -341,5 +354,9 @@ pub fn decrypt_with_shared_secret(
 ) -> Vec<u8> {
     set_panic_hook();
 
-    tpke::decrypt_with_shared_secret(&ciphertext.0, &shared_secret.0)
+    tpke::checked_decrypt_with_shared_secret(
+        &ciphertext.ciphertext,
+        &ciphertext.aad,
+        &shared_secret.0,
+    )
 }

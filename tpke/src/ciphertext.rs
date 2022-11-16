@@ -14,8 +14,8 @@ use crate::{construct_tag_hash, hash_to_g2};
 #[derive(Clone, Debug)]
 pub struct Ciphertext<E: PairingEngine> {
     pub commitment: E::G1Affine, // U
-    pub auth_tag: E::G2Affine, // W
-    pub ciphertext: Vec<u8>,   // V
+    pub auth_tag: E::G2Affine,   // W
+    pub ciphertext: Vec<u8>,     // V
 }
 
 impl<E: PairingEngine> Ciphertext<E> {
@@ -38,29 +38,30 @@ impl<E: PairingEngine> Ciphertext<E> {
 
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
-        self.nonce.write(&mut bytes).unwrap();
+        self.commitment.write(&mut bytes).unwrap();
         self.auth_tag.write(&mut bytes).unwrap();
         bytes.extend_from_slice(&self.ciphertext);
         bytes
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        const NONCE_LEN: usize = 97;
-        let mut nonce_bytes = [0u8; NONCE_LEN];
-        nonce_bytes.copy_from_slice(&bytes[..NONCE_LEN]);
-        let nonce = E::G1Affine::read(&nonce_bytes[..]).unwrap();
+        const COMMITMENT_LEN: usize = 97;
+        let mut commitment_bytes = [0u8; COMMITMENT_LEN];
+        commitment_bytes.copy_from_slice(&bytes[..COMMITMENT_LEN]);
+        let commitment = E::G1Affine::read(&commitment_bytes[..]).unwrap();
 
         const AUTH_TAG_LEN: usize = 193;
         let mut auth_tag_bytes = [0u8; AUTH_TAG_LEN];
-        auth_tag_bytes
-            .copy_from_slice(&bytes[NONCE_LEN..NONCE_LEN + AUTH_TAG_LEN]);
+        auth_tag_bytes.copy_from_slice(
+            &bytes[COMMITMENT_LEN..COMMITMENT_LEN + AUTH_TAG_LEN],
+        );
         let auth_tag = E::G2Affine::read(&auth_tag_bytes[..]).unwrap();
 
         const CIPHERTEXT_LEN: usize = 33;
-        let ciphertext = bytes[NONCE_LEN + AUTH_TAG_LEN..].to_vec();
+        let ciphertext = bytes[COMMITMENT_LEN + AUTH_TAG_LEN..].to_vec();
 
         Self {
-            nonce,
+            commitment,
             auth_tag,
             ciphertext,
         }
@@ -118,10 +119,25 @@ pub fn check_ciphertext_validity<E: PairingEngine>(
     ]) == E::Fqk::one()
 }
 
-pub fn decrypt<E: PairingEngine>(
+fn decrypt<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     privkey: E::G2Affine,
 ) -> Vec<u8> {
+    let s = E::product_of_pairings(&[(
+        E::G1Prepared::from(ciphertext.commitment),
+        E::G2Prepared::from(privkey),
+    )]);
+    decrypt_with_shared_secret(ciphertext, &s)
+}
+
+pub fn checked_decrypt<E: PairingEngine>(
+    ciphertext: &Ciphertext<E>,
+    aad: &[u8],
+    privkey: E::G2Affine,
+) -> Vec<u8> {
+    if !check_ciphertext_validity(ciphertext, aad) {
+        panic!("Ciphertext is invalid");
+    }
     let s = E::product_of_pairings(&[(
         E::G1Prepared::from(ciphertext.commitment),
         E::G2Prepared::from(privkey),

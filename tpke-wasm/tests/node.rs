@@ -1,6 +1,7 @@
 //! Test suite for the Nodejs.
 
 extern crate wasm_bindgen_test;
+
 use tpke_wasm::*;
 use wasm_bindgen_test::*;
 
@@ -15,8 +16,9 @@ pub fn participant_payload_serialization() {
     let shares_num = 5;
     let num_entities = 5;
     let message = "my-secret-message".as_bytes().to_vec();
+    let aad = "my-aad".as_bytes().to_vec();
     let setup = Setup::new(threshold, shares_num, num_entities);
-    let ciphertext = encrypt(message, setup.public_key);
+    let ciphertext = encrypt(message, aad, setup.public_key);
 
     let participant_payload =
         ParticipantPayload::new(setup.private_context_at(0), ciphertext);
@@ -34,10 +36,11 @@ fn symmetric_encryption() {
     let shares_num = 5;
     let num_entities = 5;
     let message = "my-secret-message".as_bytes().to_vec();
+    let aad = "my-aad".as_bytes().to_vec();
 
     let setup = Setup::new(threshold, shares_num, num_entities);
 
-    let ciphertext = encrypt(message.clone(), setup.public_key);
+    let ciphertext = encrypt(message.clone(), aad, setup.public_key);
     let plaintext = decrypt(ciphertext, setup.private_key);
 
     // TODO: Plaintext is padded to 32 bytes. Fix this.
@@ -51,6 +54,7 @@ fn threshold_encryption() {
     let shares_num = 16;
     let num_entities = 5;
     let message = "my-secret-message".as_bytes().to_vec();
+    let aad = "my-aad".as_bytes().to_vec();
 
     //
     // On the client side
@@ -60,7 +64,7 @@ fn threshold_encryption() {
     let setup = Setup::new(threshold, shares_num, num_entities);
 
     // Encrypt the message
-    let ciphertext = encrypt(message.to_vec(), setup.public_key);
+    let ciphertext = encrypt(message.to_vec(), aad, setup.public_key);
 
     // Craete and serialize participant payloads for transport
     let participant_payloads_bytes: Vec<Vec<u8>> = setup
@@ -123,5 +127,5 @@ fn threshold_encryption() {
 
     // Decrypt the message
     let plaintext = decrypt_with_shared_secret(ciphertext, shared_secret);
-    assert_eq!(message, &plaintext[..message.len()])
+    assert_eq!(message, plaintext)
 }
