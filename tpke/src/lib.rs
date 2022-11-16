@@ -72,8 +72,8 @@ pub fn setup<E: PairingEngine>(
     threshold: usize,
     shares_num: usize,
     num_entities: usize,
+    rng: &mut impl RngCore,
 ) -> (E::G1Affine, E::G2Affine, Vec<PrivateDecryptionContext<E>>) {
-    let rng = &mut ark_std::test_rng();
     let g = E::G1Affine::prime_subgroup_generator();
     let h = E::G2Affine::prime_subgroup_generator();
     let _g_inv = E::G1Prepared::from(-g);
@@ -184,7 +184,7 @@ mod tests {
         let aad: &[u8] = "aad".as_bytes();
 
         let (pubkey, _privkey, _) =
-            setup::<E>(threshold, shares_num, num_entities);
+            setup::<E>(threshold, shares_num, num_entities, &mut rng);
 
         let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
             msg, aad, pubkey, &mut rng,
@@ -220,7 +220,7 @@ mod tests {
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, privkey, _) =
-            setup::<E>(threshold, shares_num, num_entities);
+            setup::<E>(threshold, shares_num, num_entities, &mut rng);
 
         let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
             msg, aad, pubkey, &mut rng,
@@ -245,7 +245,7 @@ mod tests {
 
     #[test]
     fn threshold_encryption() {
-        let rng = &mut test_rng();
+        let mut rng = &mut test_rng();
         let threshold = 16 * 2 / 3;
         let shares_num = 16;
         let num_entities = 5;
@@ -253,7 +253,7 @@ mod tests {
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, _privkey, contexts) =
-            setup::<E>(threshold, shares_num, num_entities);
+            setup::<E>(threshold, shares_num, num_entities, &mut rng);
         let mut ciphertext = encrypt::<_, E>(msg, aad, pubkey, rng);
 
         let mut shares: Vec<DecryptionShare<E>> = vec![];
@@ -300,7 +300,7 @@ mod tests {
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, _privkey, _) =
-            setup::<E>(threshold, shares_num, num_entities);
+            setup::<E>(threshold, shares_num, num_entities, &mut rng);
         let mut ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
             msg, aad, pubkey, &mut rng,
         );

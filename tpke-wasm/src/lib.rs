@@ -234,8 +234,9 @@ impl Setup {
     ) -> Self {
         set_panic_hook();
 
+        let mut rng = rand::thread_rng();
         let (public_key, private_key, contexts) =
-            tpke::setup::<E>(threshold, shares_num, num_entities);
+            tpke::setup::<E>(threshold, shares_num, num_entities, &mut rng);
         let private_contexts = contexts
             .clone()
             .into_iter()
