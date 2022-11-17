@@ -1,5 +1,15 @@
 # Benchmarks
 
+## Setup
+
+Benchmarks produced on:
+
+- Intel® Core™ i7-10875H CPU @ 2.30GHz × 16 (single-threaded),
+- Version 107.0.5304.110 (Official Build) (64-bit),
+- Pop!\_OS 22.04 LTS (64-bit),
+
+````bash
+
 ## Benchmarking WASM
 
 Based on `centurion.rs` (docs)[https://github.com/bheisler/criterion.rs/blob/version-0.4/book/src/user_guide/wasi.md#webasseblywasi-benchmarking]
@@ -12,7 +22,7 @@ npm install -g @wasmer/cli
 
 cargo wasi build --bench=benchmarks --release
 cp `ls -t ../target/wasm32-wasi/release/deps/*.wasm | head -n 1` benchmarks.wasm
-```
+````
 
 ### Running
 
