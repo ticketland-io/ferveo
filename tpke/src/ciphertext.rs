@@ -70,7 +70,7 @@ impl<E: PairingEngine> Ciphertext<E> {
 pub fn encrypt<R: RngCore, E: PairingEngine>(
     message: &[u8],
     aad: &[u8],
-    pubkey: E::G1Affine,
+    pubkey: &E::G1Affine,
     rng: &mut R,
 ) -> Ciphertext<E> {
     // r

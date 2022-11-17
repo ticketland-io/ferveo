@@ -18,10 +18,10 @@ pub fn participant_payload_serialization() {
     let message = "my-secret-message".as_bytes().to_vec();
     let aad = "my-aad".as_bytes().to_vec();
     let setup = Setup::new(threshold, shares_num, num_entities);
-    let ciphertext = encrypt(message, aad, setup.public_key);
+    let ciphertext = encrypt(&message, &aad, &setup.public_key);
 
     let participant_payload =
-        ParticipantPayload::new(setup.private_context_at(0), ciphertext);
+        ParticipantPayload::new(&setup.private_context_at(0), &ciphertext);
     let serialized = participant_payload.to_bytes();
     let deserialized: ParticipantPayload =
         ParticipantPayload::from_bytes(&serialized);
@@ -40,8 +40,8 @@ fn encrypts_and_decrypts() {
 
     let setup = Setup::new(threshold, shares_num, num_entities);
 
-    let ciphertext = encrypt(message.clone(), aad, setup.public_key);
-    let plaintext = decrypt(ciphertext, setup.private_key);
+    let ciphertext = encrypt(&message, &aad, &setup.public_key);
+    let plaintext = decrypt(&ciphertext, &setup.private_key);
 
     // TODO: Plaintext is padded to 32 bytes. Fix this.
     assert_eq!(message, plaintext[..message.len()])
@@ -64,7 +64,7 @@ fn threshold_encryption() {
     let setup = Setup::new(threshold, shares_num, num_entities);
 
     // Encrypt the message
-    let ciphertext = encrypt(message.to_vec(), aad, setup.public_key);
+    let ciphertext = encrypt(&message, &aad, &setup.public_key);
 
     // Craete and serialize participant payloads for transport
     let participant_payloads_bytes: Vec<Vec<u8>> = setup
@@ -72,8 +72,8 @@ fn threshold_encryption() {
         .iter()
         .map(|index| {
             ParticipantPayload::new(
-                setup.private_context_at(*index),
-                ciphertext.clone(),
+                &setup.private_context_at(*index),
+                &ciphertext,
             )
             .to_bytes()
         })
@@ -119,13 +119,13 @@ fn threshold_encryption() {
         .collect();
 
     // Combine shares into a shared secret
-    let mut ss_builder = SharedSecretBuilder::new(setup);
+    let mut ss_builder = SharedSecretBuilder::new(&setup);
     for share in decryption_shares {
-        ss_builder.add_decryption_share(share);
+        ss_builder.add_decryption_share(&share);
     }
     let shared_secret = ss_builder.build();
 
     // Decrypt the message
-    let plaintext = decrypt_with_shared_secret(ciphertext, shared_secret);
+    let plaintext = decrypt_with_shared_secret(&ciphertext, &shared_secret);
     assert_eq!(message, plaintext)
 }

@@ -187,7 +187,7 @@ mod tests {
             setup::<E>(threshold, shares_num, num_entities, &mut rng);
 
         let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
-            msg, aad, pubkey, &mut rng,
+            msg, aad, &pubkey, &mut rng,
         );
 
         let serialized = ciphertext.to_bytes();
@@ -223,7 +223,7 @@ mod tests {
             setup::<E>(threshold, shares_num, num_entities, &mut rng);
 
         let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
-            msg, aad, pubkey, &mut rng,
+            msg, aad, &pubkey, &mut rng,
         );
         let plaintext = checked_decrypt(&ciphertext, aad, privkey);
 
@@ -254,7 +254,7 @@ mod tests {
 
         let (pubkey, _privkey, contexts) =
             setup::<E>(threshold, shares_num, num_entities, &mut rng);
-        let mut ciphertext = encrypt::<_, E>(msg, aad, pubkey, rng);
+        let mut ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
         let mut shares: Vec<DecryptionShare<E>> = vec![];
         for context in contexts.iter() {
@@ -302,7 +302,7 @@ mod tests {
         let (pubkey, _privkey, _) =
             setup::<E>(threshold, shares_num, num_entities, &mut rng);
         let mut ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
-            msg, aad, pubkey, &mut rng,
+            msg, aad, &pubkey, &mut rng,
         );
 
         // So far, the ciphertext is valid
