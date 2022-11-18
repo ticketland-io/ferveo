@@ -35,7 +35,7 @@ function benchmark_combine(setup) {
   const decryptionShares = [];
   setup.decrypter_indexes().forEach((index) => {
     const decryptionContext = setup.private_context_at(index);
-    const share =  new ParticipantPayload(
+    const share = new ParticipantPayload(
       decryptionContext,
       ciphertext
     ).to_decryption_share();

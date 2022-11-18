@@ -24,7 +24,9 @@ mod combine;
 pub use combine::*;
 mod context;
 pub use context::*;
-// TODO: Turn into a crate feature
+
+// TODO: Turn into a crate features
+pub mod api;
 pub mod serialization;
 
 pub trait ThresholdEncryptionParameters {
