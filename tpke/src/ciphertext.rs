@@ -40,7 +40,6 @@ impl<E: PairingEngine> Ciphertext<E> {
         let mut bytes = Vec::new();
         self.commitment.write(&mut bytes).unwrap();
         self.auth_tag.write(&mut bytes).unwrap();
-        bytes.extend_from_slice(&self.ciphertext);
         bytes
     }
 
@@ -62,8 +61,8 @@ impl<E: PairingEngine> Ciphertext<E> {
 
         Self {
             commitment,
-            auth_tag,
             ciphertext,
+            auth_tag,
         }
     }
 }
@@ -71,7 +70,7 @@ impl<E: PairingEngine> Ciphertext<E> {
 pub fn encrypt<R: RngCore, E: PairingEngine>(
     message: &[u8],
     aad: &[u8],
-    pubkey: E::G1Affine,
+    pubkey: &E::G1Affine,
     rng: &mut R,
 ) -> Ciphertext<E> {
     // r

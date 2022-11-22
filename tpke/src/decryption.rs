@@ -3,10 +3,8 @@
 
 use crate::*;
 use ark_ec::ProjectiveCurve;
-use ark_serialize::CanonicalDeserialize;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DecryptionShare<E: PairingEngine> {
     pub decrypter_index: usize,
     pub decryption_share: E::G1Affine,

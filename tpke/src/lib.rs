@@ -5,7 +5,7 @@ use ark_ec::{msm::FixedBaseMSM, AffineCurve, PairingEngine};
 use ark_ff::{Field, One, PrimeField, ToBytes, UniformRand, Zero};
 use ark_poly::EvaluationDomain;
 use ark_poly::{univariate::DensePolynomial, UVPolynomial};
-use ark_serialize::CanonicalSerialize;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::izip;
 use subproductdomain::SubproductDomain;
 
@@ -24,7 +24,9 @@ mod combine;
 pub use combine::*;
 mod context;
 pub use context::*;
-// TODO: Turn into a crate feature
+
+// TODO: Turn into a crate features
+pub mod api;
 pub mod serialization;
 
 pub trait ThresholdEncryptionParameters {
@@ -187,7 +189,7 @@ mod tests {
             setup::<E>(threshold, shares_num, num_entities, &mut rng);
 
         let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
-            msg, aad, pubkey, &mut rng,
+            msg, aad, &pubkey, &mut rng,
         );
 
         let serialized = ciphertext.to_bytes();
@@ -223,7 +225,7 @@ mod tests {
             setup::<E>(threshold, shares_num, num_entities, &mut rng);
 
         let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
-            msg, aad, pubkey, &mut rng,
+            msg, aad, &pubkey, &mut rng,
         );
         let plaintext = checked_decrypt(&ciphertext, aad, privkey);
 
@@ -254,7 +256,7 @@ mod tests {
 
         let (pubkey, _privkey, contexts) =
             setup::<E>(threshold, shares_num, num_entities, &mut rng);
-        let mut ciphertext = encrypt::<_, E>(msg, aad, pubkey, rng);
+        let mut ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
         let mut shares: Vec<DecryptionShare<E>> = vec![];
         for context in contexts.iter() {
@@ -302,7 +304,7 @@ mod tests {
         let (pubkey, _privkey, _) =
             setup::<E>(threshold, shares_num, num_entities, &mut rng);
         let mut ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
-            msg, aad, pubkey, &mut rng,
+            msg, aad, &pubkey, &mut rng,
         );
 
         // So far, the ciphertext is valid

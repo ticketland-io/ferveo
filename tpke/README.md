@@ -19,5 +19,3 @@ cp `ls -t ../target/wasm32-wasi/release/deps/*.wasm | head -n 1` benchmarks.wasm
 ```bash
 wasmer-js run --dir=. benchmarks.wasm -- --bench
 ```
-
-### Results

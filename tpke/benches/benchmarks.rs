@@ -34,7 +34,7 @@ pub fn bench_decryption(c: &mut Criterion) {
             rng.fill_bytes(&mut msg[..]);
             messages.push(msg.clone());
 
-            ciphertexts.push(encrypt::<_, E>(&messages[j], aad, pubkey, rng));
+            ciphertexts.push(encrypt::<_, E>(&messages[j], aad, &pubkey, rng));
 
             dec_shares.push(Vec::with_capacity(threshold));
             for ctx in contexts.iter().take(num_entities) {
@@ -84,7 +84,7 @@ pub fn bench_decryption(c: &mut Criterion) {
             rng.fill_bytes(&mut msg);
             messages.push(msg.clone());
 
-            ciphertexts.push(encrypt::<_, E>(&messages[j], aad, pubkey, rng));
+            ciphertexts.push(encrypt::<_, E>(&messages[j], aad, &pubkey, rng));
 
             dec_shares.push(Vec::with_capacity(threshold));
             for ctx in contexts.iter().take(num_entities) {

@@ -2,16 +2,12 @@ mod utils;
 
 extern crate group_threshold_cryptography as tpke;
 
-use ark_ec::{AffineCurve, ProjectiveCurve};
-use ark_ff::{BigInteger256, ToBytes};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;
 
-extern crate alloc;
-// Use `wee_alloc` as the global allocator.
 extern crate wee_alloc;
 
 pub type E = ark_bls12_381::Bls12_381;
@@ -25,74 +21,27 @@ pub type TpkeSharedSecret =
 
 #[wasm_bindgen]
 #[derive(Clone, Debug)]
-pub struct PrivateDecryptionContext {
-    b_inv: ark_bls12_381::Fr,
-    decrypter_index: usize,
-}
-
-// Keeping this out of the `PrivateDecryptionContext`, since wasm_bindgen doesn't
-// support constant field definitions.
-const B_INV_LEN: usize = 32;
-const DECRYPTER_INDEX_LEN: usize = 8;
-
+pub struct PrivateDecryptionContext(tpke::api::PrivateDecryptionContext);
 #[wasm_bindgen]
 impl PrivateDecryptionContext {
-    pub(crate) fn new(
-        b_inv: ark_bls12_381::Fr,
-        decrypter_index: usize,
-    ) -> Self {
-        Self {
-            b_inv,
-            decrypter_index,
-        }
-    }
-
     pub(crate) fn serialized_size() -> usize {
-        B_INV_LEN + DECRYPTER_INDEX_LEN
+        tpke::api::PrivateDecryptionContext::serialized_size()
     }
 
     #[wasm_bindgen]
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        self.b_inv.0.write(&mut bytes).unwrap();
-
-        let decrypter_index =
-            bincode::serialize(&self.decrypter_index).unwrap();
-        bytes.extend(decrypter_index);
-
-        bytes
+        self.0.to_bytes()
     }
 
     #[wasm_bindgen]
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        let b_inv_bytes = &bytes[0..B_INV_LEN];
-        // Chunking bytes to u64s to construct a BigInteger256.
-        let b_inv = b_inv_bytes
-            .chunks(8)
-            .map(|x| {
-                let mut bytes = [0u8; 8];
-                bytes.copy_from_slice(x);
-                u64::from_le_bytes(bytes)
-            })
-            .collect::<Vec<u64>>();
-        let b_inv: [u64; 4] = b_inv.try_into().unwrap();
-        let b_inv = ark_bls12_381::Fr::new(BigInteger256::new(b_inv));
-
-        let decrypter_index_bytes =
-            &bytes[B_INV_LEN..B_INV_LEN + DECRYPTER_INDEX_LEN];
-        let decrypter_index =
-            bincode::deserialize(decrypter_index_bytes).unwrap();
-
-        Self {
-            b_inv,
-            decrypter_index,
-        }
+        Self(tpke::api::PrivateDecryptionContext::from_bytes(bytes))
     }
 }
 
 #[wasm_bindgen]
 #[derive(Clone, Debug)]
-pub struct DecryptionShare(TpkeDecryptionShare);
+pub struct DecryptionShare(tpke::api::DecryptionShare);
 
 #[wasm_bindgen]
 impl DecryptionShare {
@@ -103,36 +52,32 @@ impl DecryptionShare {
 
     #[wasm_bindgen]
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        let share = TpkeDecryptionShare::from_bytes(bytes);
+        let share = tpke::api::DecryptionShare::from_bytes(bytes);
         Self(share)
     }
 }
 
 #[wasm_bindgen]
 #[derive(Clone, Debug)]
-pub struct ParticipantPayload {
-    decryption_context: PrivateDecryptionContext,
-    // Using inner type here because `ciphertext` is never accessed from the outside.
-    ciphertext: TpkeCiphertext,
-}
+pub struct ParticipantPayload(tpke::api::ParticipantPayload);
 
 #[wasm_bindgen]
 impl ParticipantPayload {
     #[wasm_bindgen(constructor)]
     pub fn new(
-        decryption_context: PrivateDecryptionContext,
-        ciphertext: Ciphertext,
+        decryption_context: &PrivateDecryptionContext,
+        ciphertext: &Ciphertext,
     ) -> Self {
-        ParticipantPayload {
-            decryption_context,
-            ciphertext: ciphertext.ciphertext,
-        }
+        Self(tpke::api::ParticipantPayload::new(
+            &decryption_context.0,
+            &ciphertext.ciphertext,
+        ))
     }
 
     #[wasm_bindgen]
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = self.decryption_context.to_bytes();
-        bytes.extend(&self.ciphertext.to_bytes());
+        let mut bytes = self.0.decryption_context.to_bytes();
+        bytes.extend(&self.0.ciphertext.to_bytes());
         bytes
     }
 
@@ -147,25 +92,15 @@ impl ParticipantPayload {
             bytes[PrivateDecryptionContext::serialized_size()..].to_vec();
         let ciphertext = tpke::Ciphertext::from_bytes(&ciphertext_bytes);
 
-        ParticipantPayload {
-            decryption_context,
+        Self(tpke::api::ParticipantPayload {
+            decryption_context: decryption_context.0,
             ciphertext,
-        }
+        })
     }
 
     #[wasm_bindgen]
     pub fn to_decryption_share(&self) -> DecryptionShare {
-        // TODO: Add verification steps
-        let decryption_share = self
-            .ciphertext
-            .commitment
-            .mul(self.decryption_context.b_inv)
-            .into_affine();
-
-        DecryptionShare(TpkeDecryptionShare {
-            decrypter_index: self.decryption_context.decrypter_index,
-            decryption_share,
-        })
+        DecryptionShare(self.0.to_decryption_share())
     }
 }
 
@@ -217,6 +152,7 @@ impl PrivateKey {
 }
 
 #[wasm_bindgen]
+#[derive(Clone, Debug)]
 pub struct Setup {
     pub public_key: PublicKey,
     pub private_key: PrivateKey,
@@ -240,7 +176,11 @@ impl Setup {
         let private_contexts = contexts
             .clone()
             .into_iter()
-            .map(|x| PrivateDecryptionContext::new(x.b_inv, x.index))
+            .map(|x| {
+                PrivateDecryptionContext(
+                    tpke::api::PrivateDecryptionContext::new(&x.b_inv, x.index),
+                )
+            })
             .collect();
         let public_contexts = contexts[0].public_decryption_contexts.to_vec();
 
@@ -260,7 +200,7 @@ impl Setup {
     pub fn private_context_at(&self, index: usize) -> PrivateDecryptionContext {
         set_panic_hook();
         let context = self.private_contexts[index].clone();
-        assert_eq!(context.decrypter_index, index);
+        assert_eq!(context.0.decrypter_index, index);
         context
     }
 
@@ -269,9 +209,11 @@ impl Setup {
         set_panic_hook();
         self.private_contexts
             .iter()
-            .map(|x| x.decrypter_index)
+            .map(|x| x.0.decrypter_index)
             .collect()
     }
+
+    // TODO: Add `decryptorShares` helper method
 }
 
 #[wasm_bindgen]
@@ -283,20 +225,23 @@ pub struct Ciphertext {
 
 #[wasm_bindgen]
 pub fn encrypt(
-    message: Vec<u8>,
-    aad: Vec<u8>,
-    public_key: PublicKey,
+    message: &[u8],
+    aad: &[u8],
+    public_key: &PublicKey,
 ) -> Ciphertext {
     set_panic_hook();
 
     let mut rng = rand::thread_rng();
     let ciphertext =
-        tpke::encrypt::<_, E>(&message, &aad, public_key.0, &mut rng);
-    Ciphertext { ciphertext, aad }
+        tpke::encrypt::<_, E>(message, aad, &public_key.0, &mut rng);
+    Ciphertext {
+        ciphertext,
+        aad: aad.to_vec(),
+    }
 }
 
 #[wasm_bindgen]
-pub fn decrypt(ciphertext: Ciphertext, private_key: PrivateKey) -> Vec<u8> {
+pub fn decrypt(ciphertext: &Ciphertext, private_key: &PrivateKey) -> Vec<u8> {
     set_panic_hook();
 
     tpke::checked_decrypt(
@@ -320,16 +265,16 @@ pub struct SharedSecretBuilder {
 #[wasm_bindgen]
 impl SharedSecretBuilder {
     #[wasm_bindgen(constructor)]
-    pub fn new(setup: Setup) -> Self {
+    pub fn new(setup: &Setup) -> Self {
         SharedSecretBuilder {
             shares: vec![],
-            contexts: setup.public_contexts,
+            contexts: setup.public_contexts.clone(),
         }
     }
 
     #[wasm_bindgen]
-    pub fn add_decryption_share(&mut self, share: DecryptionShare) {
-        self.shares.push(share.0);
+    pub fn add_decryption_share(&mut self, share: &DecryptionShare) {
+        self.shares.push(share.0 .0.clone());
     }
 
     #[wasm_bindgen]
@@ -350,8 +295,8 @@ impl SharedSecretBuilder {
 
 #[wasm_bindgen]
 pub fn decrypt_with_shared_secret(
-    ciphertext: Ciphertext,
-    shared_secret: SharedSecret,
+    ciphertext: &Ciphertext,
+    shared_secret: &SharedSecret,
 ) -> Vec<u8> {
     set_panic_hook();
 
