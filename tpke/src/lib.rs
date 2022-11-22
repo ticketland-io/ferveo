@@ -5,7 +5,7 @@ use ark_ec::{msm::FixedBaseMSM, AffineCurve, PairingEngine};
 use ark_ff::{Field, One, PrimeField, ToBytes, UniformRand, Zero};
 use ark_poly::EvaluationDomain;
 use ark_poly::{univariate::DensePolynomial, UVPolynomial};
-use ark_serialize::CanonicalSerialize;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::izip;
 use subproductdomain::SubproductDomain;
 
@@ -24,6 +24,10 @@ mod combine;
 pub use combine::*;
 mod context;
 pub use context::*;
+
+// TODO: Turn into a crate features
+pub mod api;
+pub mod serialization;
 
 pub trait ThresholdEncryptionParameters {
     type E: PairingEngine;
@@ -70,8 +74,8 @@ pub fn setup<E: PairingEngine>(
     threshold: usize,
     shares_num: usize,
     num_entities: usize,
+    rng: &mut impl RngCore,
 ) -> (E::G1Affine, E::G2Affine, Vec<PrivateDecryptionContext<E>>) {
-    let rng = &mut ark_std::test_rng();
     let g = E::G1Affine::prime_subgroup_generator();
     let h = E::G2Affine::prime_subgroup_generator();
     let _g_inv = E::G1Prepared::from(-g);
@@ -173,6 +177,42 @@ mod tests {
     type E = ark_bls12_381::Bls12_381;
 
     #[test]
+    fn ciphertext_serialization() {
+        let mut rng = test_rng();
+        let threshold = 3;
+        let shares_num = 5;
+        let num_entities = 5;
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "aad".as_bytes();
+
+        let (pubkey, _privkey, _) =
+            setup::<E>(threshold, shares_num, num_entities, &mut rng);
+
+        let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
+            msg, aad, &pubkey, &mut rng,
+        );
+
+        let serialized = ciphertext.to_bytes();
+        let deserialized: Ciphertext<E> = Ciphertext::from_bytes(&serialized);
+
+        assert!(serialized == deserialized.to_bytes())
+    }
+
+    #[test]
+    fn decryption_share_serialization() {
+        let decryption_share = DecryptionShare::<E> {
+            decrypter_index: 1,
+            decryption_share: ark_bls12_381::G1Affine::prime_subgroup_generator(
+            ),
+        };
+
+        let serialized = decryption_share.to_bytes();
+        let deserialized: DecryptionShare<E> =
+            DecryptionShare::from_bytes(&serialized);
+        assert_eq!(serialized, deserialized.to_bytes())
+    }
+
+    #[test]
     fn symmetric_encryption() {
         let mut rng = test_rng();
         let threshold = 3;
@@ -182,14 +222,14 @@ mod tests {
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, privkey, _) =
-            setup::<E>(threshold, shares_num, num_entities);
+            setup::<E>(threshold, shares_num, num_entities, &mut rng);
 
         let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
-            msg, aad, pubkey, &mut rng,
+            msg, aad, &pubkey, &mut rng,
         );
-        let plaintext = decrypt(&ciphertext, privkey);
+        let plaintext = checked_decrypt(&ciphertext, aad, privkey);
 
-        assert!(msg == plaintext)
+        assert_eq!(msg, plaintext)
     }
 
     // Source: https://stackoverflow.com/questions/26469715/how-do-i-write-a-rust-unit-test-that-ensures-that-a-panic-has-occurred
@@ -207,7 +247,7 @@ mod tests {
 
     #[test]
     fn threshold_encryption() {
-        let rng = &mut test_rng();
+        let mut rng = &mut test_rng();
         let threshold = 16 * 2 / 3;
         let shares_num = 16;
         let num_entities = 5;
@@ -215,26 +255,27 @@ mod tests {
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, _privkey, contexts) =
-            setup::<E>(threshold, shares_num, num_entities);
-        let mut ciphertext = encrypt::<_, E>(msg, aad, pubkey, rng);
+            setup::<E>(threshold, shares_num, num_entities, &mut rng);
+        let mut ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
         let mut shares: Vec<DecryptionShare<E>> = vec![];
         for context in contexts.iter() {
             shares.push(context.create_share(&ciphertext));
         }
+
         /*for pub_context in contexts[0].public_decryption_contexts.iter() {
             assert!(pub_context
                 .blinded_key_shares
                 .verify_blinding(&pub_context.public_key_shares, rng));
         }*/
-        let prepared_blinded_key_shares = contexts[0].prepare_combine(&shares);
-        let s =
-            contexts[0].share_combine(&shares, &prepared_blinded_key_shares);
+        let prepared_blinded_key_shares =
+            prepare_combine(&contexts[0].public_decryption_contexts, &shares);
+        let s = share_combine(&shares, &prepared_blinded_key_shares);
 
         // So far, the ciphertext is valid
         let plaintext =
             checked_decrypt_with_shared_secret(&ciphertext, aad, &s);
-        assert!(plaintext == msg);
+        assert_eq!(plaintext, msg);
 
         // Malformed the ciphertext
         ciphertext.ciphertext[0] += 1;
@@ -261,9 +302,9 @@ mod tests {
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, _privkey, _) =
-            setup::<E>(threshold, shares_num, num_entities);
+            setup::<E>(threshold, shares_num, num_entities, &mut rng);
         let mut ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
-            msg, aad, pubkey, &mut rng,
+            msg, aad, &pubkey, &mut rng,
         );
 
         // So far, the ciphertext is valid

@@ -14,14 +14,14 @@ pub fn bench_decryption(c: &mut Criterion) {
         num_entities: usize,
         msg_size: usize,
     ) -> impl Fn() {
-        let rng = &mut rand::rngs::StdRng::seed_from_u64(0);
+        let mut rng = &mut rand::rngs::StdRng::seed_from_u64(0);
         let aad: &[u8] = "my-aad".as_bytes();
 
         type E = ark_bls12_381::Bls12_381;
         let threshold = num_shares * 2 / 3;
 
         let (pubkey, _, contexts) =
-            setup::<E>(threshold, num_shares, num_entities);
+            setup::<E>(threshold, num_shares, num_entities, &mut rng);
 
         // let mut messages: Vec<[u8; NUM_OF_TX]> = vec![];
         let mut messages: Vec<Vec<u8>> = vec![];
@@ -34,26 +34,26 @@ pub fn bench_decryption(c: &mut Criterion) {
             rng.fill_bytes(&mut msg[..]);
             messages.push(msg.clone());
 
-            ciphertexts.push(encrypt::<_, E>(&messages[j], aad, pubkey, rng));
+            ciphertexts.push(encrypt::<_, E>(&messages[j], aad, &pubkey, rng));
 
             dec_shares.push(Vec::with_capacity(threshold));
             for ctx in contexts.iter().take(num_entities) {
                 dec_shares[j].push(ctx.create_share(&ciphertexts[j]));
             }
         }
-        let prepared_blinded_key_shares =
-            contexts[0].prepare_combine(&dec_shares[0]);
+        let prepared_blinded_key_shares = prepare_combine(
+            &contexts[0].public_decryption_contexts,
+            &dec_shares[0],
+        );
 
         move || {
             let shares: Vec<Vec<DecryptionShare<E>>> = dec_shares.clone();
 
             for i in 0..ciphertexts.len() {
-                black_box(
-                    contexts[0].share_combine(
-                        &shares[i],
-                        &prepared_blinded_key_shares,
-                    ),
-                );
+                black_box(share_combine(
+                    &shares[i],
+                    &prepared_blinded_key_shares,
+                ));
             }
         }
     }
@@ -64,14 +64,14 @@ pub fn bench_decryption(c: &mut Criterion) {
         num_entities: usize,
         msg_size: usize,
     ) -> impl Fn() {
-        let rng = &mut rand::rngs::StdRng::seed_from_u64(0);
+        let mut rng = &mut rand::rngs::StdRng::seed_from_u64(0);
         let aad: &[u8] = "my-aad".as_bytes();
 
         type E = ark_bls12_381::Bls12_381;
         let threshold = num_shares * 2 / 3;
 
         let (pubkey, _, contexts) =
-            setup::<E>(threshold, num_shares, num_entities);
+            setup::<E>(threshold, num_shares, num_entities, &mut rng);
 
         // let mut messages: Vec<[u8; NUM_OF_TX]> = vec![];
         let mut messages: Vec<Vec<u8>> = vec![];
@@ -84,7 +84,7 @@ pub fn bench_decryption(c: &mut Criterion) {
             rng.fill_bytes(&mut msg);
             messages.push(msg.clone());
 
-            ciphertexts.push(encrypt::<_, E>(&messages[j], aad, pubkey, rng));
+            ciphertexts.push(encrypt::<_, E>(&messages[j], aad, &pubkey, rng));
 
             dec_shares.push(Vec::with_capacity(threshold));
             for ctx in contexts.iter().take(num_entities) {
@@ -98,16 +98,16 @@ pub fn bench_decryption(c: &mut Criterion) {
             let shares: Vec<Vec<DecryptionShare<E>>> = dec_shares.clone();
 
             contexts[0].batch_verify_decryption_shares(&c, &shares, rng);
-            let prepared_blinded_key_shares =
-                contexts[0].prepare_combine(&dec_shares[0]);
+            let prepared_blinded_key_shares = prepare_combine(
+                &contexts[0].public_decryption_contexts,
+                &dec_shares[0],
+            );
 
             for i in 0..ciphertexts.len() {
-                black_box(
-                    contexts[0].share_combine(
-                        &shares[i],
-                        &prepared_blinded_key_shares,
-                    ),
-                );
+                black_box(share_combine(
+                    &shares[i],
+                    &prepared_blinded_key_shares,
+                ));
             }
         }
     }

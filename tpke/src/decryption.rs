@@ -1,12 +1,40 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
+
 use crate::*;
 use ark_ec::ProjectiveCurve;
 
 #[derive(Debug, Clone)]
 pub struct DecryptionShare<E: PairingEngine> {
-    pub decryptor_index: usize,
+    pub decrypter_index: usize,
     pub decryption_share: E::G1Affine,
+}
+
+impl<E: PairingEngine> DecryptionShare<E> {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let decrypter_index =
+            bincode::serialize(&self.decrypter_index).unwrap();
+        bytes.extend(&decrypter_index);
+        CanonicalSerialize::serialize(&self.decryption_share, &mut bytes)
+            .unwrap();
+
+        bytes
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let INDEX_BYTE_LEN = 8;
+        let decrypter_index =
+            bincode::deserialize(&bytes[0..INDEX_BYTE_LEN]).unwrap();
+        let decryption_share =
+            CanonicalDeserialize::deserialize(&bytes[INDEX_BYTE_LEN..])
+                .unwrap();
+
+        DecryptionShare {
+            decrypter_index,
+            decryption_share,
+        }
+    }
 }
 
 impl<E: PairingEngine> PrivateDecryptionContext<E> {
@@ -18,7 +46,7 @@ impl<E: PairingEngine> PrivateDecryptionContext<E> {
             ciphertext.commitment.mul(self.b_inv).into_affine();
 
         DecryptionShare {
-            decryptor_index: self.index,
+            decrypter_index: self.index,
             decryption_share,
         }
     }
@@ -36,7 +64,7 @@ impl<E: PairingEngine> PrivateDecryptionContext<E> {
         let blinding_keys = shares[0]
             .iter()
             .map(|d| {
-                self.public_decryption_contexts[d.decryptor_index]
+                self.public_decryption_contexts[d.decrypter_index]
                     .blinded_key_shares
                     .blinding_key_prepared
                     .clone()

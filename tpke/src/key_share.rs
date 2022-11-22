@@ -5,14 +5,14 @@ use crate::*;
 use ark_ec::ProjectiveCurve;
 use itertools::Itertools;
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct PublicKeyShares<E: PairingEngine> {
     pub public_key_shares: Vec<E::G1Affine>, // A_{i, \omega_i}
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct BlindedKeyShares<E: PairingEngine> {
-    pub blinding_key: E::G2Affine,            // [b] H
+    pub blinding_key: E::G2Affine,
     pub blinding_key_prepared: E::G2Prepared, // [b] H
     pub blinded_key_shares: Vec<E::G2Affine>, // [b] Z_{i, \omega_i}
     pub window_tables: Vec<BlindedKeyShareWindowTable<E>>, // [b*omega_i^-1] Z_{i, \omega_i}
@@ -81,12 +81,12 @@ impl<E: PairingEngine> BlindedKeyShares<E> {
         )
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct BlindedKeyShareWindowTable<E: PairingEngine> {
     pub window_table: Vec<Vec<E::G2Affine>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct PrivateKeyShare<E: PairingEngine> {
     pub private_key_shares: Vec<E::G2Affine>,
 }
