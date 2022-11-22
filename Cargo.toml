@@ -6,6 +6,7 @@ members = [
   "subproductdomain",
   "tpke",
   "tpke-wasm",
+  "tpke-python",
 ]
 
 [profile.bench]

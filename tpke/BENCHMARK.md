@@ -1,6 +1,6 @@
 # Benchmarks
 
-## Setup
+## Hardware
 
 Benchmarks produced on:
 
