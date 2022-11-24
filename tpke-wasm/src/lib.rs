@@ -170,7 +170,7 @@ impl Setup {
 
         let mut rng = rand::thread_rng();
         let (public_key, private_key, contexts) =
-            tpke::setup_fast::<E>(threshold, shares_num, &mut rng);
+            tpke::setup_fast::<E>(threshold, shares_num,  &mut rng);
         let private_contexts = contexts
             .clone()
             .into_iter()
