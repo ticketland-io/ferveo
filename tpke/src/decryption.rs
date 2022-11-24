@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 use crate::*;
+
 use ark_ec::ProjectiveCurve;
 
 #[derive(Debug, Clone)]
@@ -42,8 +43,9 @@ impl<E: PairingEngine> PrivateDecryptionContext<E> {
         &self,
         ciphertext: &Ciphertext<E>,
     ) -> DecryptionShare<E> {
-        let decryption_share =
-            ciphertext.commitment.mul(self.b_inv).into_affine();
+        // let decryption_share =
+        //     ciphertext.commitment.mul(self.b_inv).into_affine();
+        let decryption_share = ciphertext.commitment;
 
         DecryptionShare {
             decrypter_index: self.index,
@@ -114,4 +116,10 @@ impl<E: PairingEngine> PrivateDecryptionContext<E> {
 
         E::product_of_pairings(&pairings) == E::Fqk::one()
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct DecryptionShareSimple<E: PairingEngine> {
+    pub decrypter_index: usize,
+    pub decryption_share: E::Fqk,
 }
