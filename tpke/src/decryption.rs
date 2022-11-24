@@ -3,6 +3,9 @@
 
 use crate::*;
 
+use ark_ec::ProjectiveCurve;
+
+
 #[derive(Debug, Clone)]
 pub struct DecryptionShareFast<E: PairingEngine> {
     pub decrypter_index: usize,
