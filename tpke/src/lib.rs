@@ -486,7 +486,7 @@ mod tests {
             &contexts[0].public_decryption_contexts,
         );
 
-        let shared_secret =
+                 let shared_secret =
             share_combine_simple::<E>(&decryption_shares, &lagrange);
 
         test_ciphertext_validation_fails(msg, aad, &ciphertext, &shared_secret);
