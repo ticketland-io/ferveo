@@ -72,9 +72,8 @@ pub fn lagrange_basis_at<E: PairingEngine>(
 }
 
 pub fn prepare_combine_simple<E: PairingEngine>(
-    context: &[PublicDecryptionContextSimple<E>],
+    shares_x: &[E::Fr],
 ) -> Vec<E::Fr> {
-    let shares_x = &context.iter().map(|ctxt| ctxt.domain).collect::<Vec<_>>();
     // Calculate lagrange coefficients using optimized formula, see https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
     let mut lagrange_coeffs = vec![];
     for x_j in shares_x {
