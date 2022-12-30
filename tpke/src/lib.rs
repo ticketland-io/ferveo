@@ -159,7 +159,7 @@ pub fn setup_fast<E: PairingEngine>(
         pubkey_shares.chunks(1),
         privkey_shares.chunks(1)
     )
-        .enumerate()
+    .enumerate()
     {
         let private_key_share = PrivateKeyShare::<E> {
             private_key_shares: private.to_vec(),
@@ -259,7 +259,7 @@ pub fn setup_simple<E: PairingEngine>(
         pubkey_shares.chunks(1),
         privkey_shares.chunks(1)
     )
-        .enumerate()
+    .enumerate()
     {
         let private_key_share = PrivateKeyShare::<E> {
             private_key_shares: private.to_vec(),
@@ -349,7 +349,8 @@ mod tests {
     fn decryption_share_serialization() {
         let decryption_share = DecryptionShareFast::<E> {
             decrypter_index: 1,
-            decryption_share: ark_bls12_381::G1Affine::prime_subgroup_generator(),
+            decryption_share: ark_bls12_381::G1Affine::prime_subgroup_generator(
+            ),
         };
 
         let serialized = decryption_share.to_bytes();
