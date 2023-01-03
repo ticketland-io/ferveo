@@ -465,8 +465,8 @@ mod tests {
         // Create decryption shares
         let decryption_shares: Vec<_> = contexts
             .iter()
-            .map(|ctxt| {
-                make_decryption_share(&ctxt.private_key_share, &ciphertext)
+            .map(|c| {
+                make_decryption_share(&c.private_key_share, &ciphertext)
             })
             .collect();
         let pub_contexts = &contexts[0].public_decryption_contexts;
