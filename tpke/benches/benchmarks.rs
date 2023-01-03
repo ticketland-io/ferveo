@@ -252,7 +252,12 @@ pub fn bench_share_combine(c: &mut Criterion) {
             }
         };
 
-        group.sample_size(10);
+    let mut group = c.benchmark_group("TPKE_SIMPLE");
+    group.sample_size(10);
+    group.measurement_time(core::time::Duration::new(30, 0));
+
+    for num_shares in NUM_SHARES_CASES {
+        let a = share_combine_bench(num_shares);
         group.bench_function(
             BenchmarkId::new("share_combine_fast", shares_num),
             |b| {
