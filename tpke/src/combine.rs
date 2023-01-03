@@ -37,6 +37,7 @@ pub fn prepare_combine_simple<E: PairingEngine>(
 ) -> Vec<E::Fr> {
     // See https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
     // In this formula x_i = 0, hence numerator is x_m
+    // See https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
     lagrange_basis_at::<E>(domain, &E::Fr::zero())
 }
 
