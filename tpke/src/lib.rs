@@ -145,16 +145,6 @@ pub fn setup<E: PairingEngine>(
     let mut private_contexts = vec![];
     let mut public_contexts = vec![];
 
-    // TODO: There are some missing variables: \hat{u_1}, \hat{u_2}
-    // See: https://nikkolasg.github.io/ferveo/pvss.html#dealers-role
-    // \hat{u_1} is defined as \hat{u}_1 \in \mathbb{G}_2
-    // See: https://nikkolasg.github.io/ferveo/dkg.html#parameters
-
-    // We're putting together a PVSS transcript
-    // It seems like there is some deviation from the docs. The output is supposed to be:
-    // "PVSS = ((F0,sigma),(F1,ldots,Ft),Zi,ωj)"
-    // https://nikkolasg.github.io/ferveo/tpke-concrete.html#dkggeneratepvsstau-total_weight-ek_i-omega_i---pvss
-    //
     // (domain, domain_inv, A, Y)
     for (index, (domain, domain_inv, public, private)) in izip!(
         // Since we're assigning only one key share to one entity we can use chunks(1)
@@ -201,11 +191,6 @@ pub fn setup<E: PairingEngine>(
     for private in private_contexts.iter_mut() {
         private.public_decryption_contexts = public_contexts.clone();
     }
-
-    // TODO: Should we also be returning some sort of signed transcript?
-    // "Post the signed message \(\tau, (F_0, \ldots, F_t), \hat{u}2, (\hat{Y}{i,\omega_j})\) to the blockchain"
-    // \tau - unique session identifier
-    // See: https://nikkolasg.github.io/ferveo/pvss.html#dealers-role
 
     (pubkey.into(), privkey.into(), private_contexts)
 }
@@ -258,14 +243,6 @@ pub fn setup_simple<E: PairingEngine>(
     let mut private_contexts = vec![];
     let mut public_contexts = vec![];
 
-    // TODO: There are some missing variables: \hat{u_1}, \hat{u_2}
-    // See: https://nikkolasg.github.io/ferveo/pvss.html#dealers-role
-
-    // We're putting together a PVSS transcript
-    // It seems like there is some deviation from the docs. The output is supposed to be:
-    // "PVSS = ((F0,sigma),(F1,ldots,Ft),Zi,ωj)"
-    // https://nikkolasg.github.io/ferveo/tpke-concrete.html#dkggeneratepvsstau-total_weight-ek_i-omega_i---pvss
-    //
     // (domain, A, Y)
     for (index, (domain, public, private)) in izip!(
         // Since we're assigning only one key share to one entity we can use chunks(1)
@@ -304,10 +281,6 @@ pub fn setup_simple<E: PairingEngine>(
     for private in private_contexts.iter_mut() {
         private.public_decryption_contexts = public_contexts.clone();
     }
-
-    // TODO: Should we also be returning some sort of signed transcript?
-    // "Post the signed message \(\tau, (F_0, \ldots, F_t), \hat{u}2, (\hat{Y}{i,\omega_j})\) to the blockchain"
-    // See: https://nikkolasg.github.io/ferveo/pvss.html#dealers-role
 
     (pubkey.into(), privkey.into(), private_contexts)
 }
