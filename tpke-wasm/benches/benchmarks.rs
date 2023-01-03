@@ -37,6 +37,7 @@ pub fn bench_encrypt_combine(c: &mut Criterion) {
         move || {
             let setup = setup.clone();
             let decryption_shares = decryption_shares.clone();
+            #[allow(clippy::unit_arg)]
             black_box({
                 let mut ss_builder = SharedSecretBuilder::new(&setup);
                 for share in decryption_shares {
