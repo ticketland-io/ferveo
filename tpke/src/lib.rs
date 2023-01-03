@@ -370,6 +370,7 @@ mod tests {
         let (pubkey, privkey, _) = setup_fast::<E>(threshold, shares_num, rng);
 
         let ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
+
         let plaintext = checked_decrypt(&ciphertext, aad, privkey);
 
         assert_eq!(msg, plaintext)
@@ -481,8 +482,7 @@ mod tests {
             .iter()
             .map(|c| c.create_share(&ciphertext))
             .collect();
-        let pub_contexts = &contexts[0].public_decryption_contexts;
-        let lagrange = prepare_combine_simple::<E>(pub_contexts);
+        let lagrange = prepare_combine_simple::<E>(&contexts[0].public_decryption_contexts);
 
         let shared_secret =
             share_combine_simple::<E>(&decryption_shares, &lagrange);
