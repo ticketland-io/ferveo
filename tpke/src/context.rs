@@ -141,3 +141,20 @@ impl<E: PairingEngine> PrivateDecryptionContextSimple<E> {
         }
     }
 }
+
+impl<E: PairingEngine> PrivateDecryptionContextSimple<E> {
+    pub fn create_share(
+        &self,
+        ciphertext: &Ciphertext<E>,
+    ) -> DecryptionShareSimple<E> {
+        let u = ciphertext.commitment;
+        let z_i = self.private_key_share.clone();
+        let z_i = z_i.private_key_shares[0];
+        // C_i = e(U, Z_i)
+        let c_i = E::pairing(u, z_i);
+        DecryptionShareSimple {
+            decrypter_index: self.index,
+            decryption_share: c_i,
+        }
+    }
+}
