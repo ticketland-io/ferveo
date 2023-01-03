@@ -7,9 +7,8 @@ use group_threshold_cryptography::*;
 type Fr = <ark_bls12_381::Bls12_381 as ark_ec::PairingEngine>::Fr;
 type E = ark_bls12_381::Bls12_381;
 
-pub fn bench_decryption(c: &mut Criterion) {
-    const NUM_SHARES_CASES: [usize; 8] = [2, 4, 8, 16, 32, 64, 128, 256];
-    const MSG_SIZE: usize = 256;
+const NUM_SHARES_CASES: [usize; 8] = [2, 4, 8, 16, 32, 64, 128, 256];
+const MSG_SIZE: usize = 256;
 
     fn share_combine_bench(num_shares: usize) -> impl Fn() {
         let mut rng = &mut rand::rngs::StdRng::seed_from_u64(0);
@@ -46,7 +45,7 @@ pub fn bench_decryption(c: &mut Criterion) {
 
     for num_shares in NUM_SHARES_CASES {
         let a = share_combine_bench(num_shares);
-        group.measurement_time(core::time::Duration::new(30, 0));
+        group.measurement_time(core::time::Duration::new(45, 0));
         group.bench_function(
             format!(
                 "share_combine: {} shares threshold 2/3 - msg-size = {} bytes",
@@ -98,7 +97,7 @@ pub fn bench_threshold_decryption_simple(c: &mut Criterion) {
 
     for num_shares in NUM_SHARES_CASES {
         let a = share_combine_bench(num_shares);
-        group.measurement_time(core::time::Duration::new(30, 0));
+        group.measurement_time(core::time::Duration::new(45, 0));
         group.bench_function(
             format!(
                 "share_combine: {} shares threshold 2/3 - msg-size = {} bytes",
