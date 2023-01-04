@@ -71,24 +71,6 @@ pub fn lagrange_basis_at<E: PairingEngine>(
     lagrange_coeffs
 }
 
-pub fn prepare_combine_simple<E: PairingEngine>(
-    shares_x: &[E::Fr],
-) -> Vec<E::Fr> {
-    // Calculate lagrange coefficients using optimized formula, see https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
-    let mut lagrange_coeffs = vec![];
-    for x_j in shares_x {
-        let mut prod = E::Fr::one();
-        for x_m in shares_x {
-            if x_j != x_m {
-                // In this formula x_i = 0, hence numerator is x_m
-                prod *= (*x_m) / (*x_m - *x_j);
-            }
-        }
-        lagrange_coeffs.push(prod);
-    }
-    lagrange_coeffs
-}
-
 pub fn share_combine_fast<E: PairingEngine>(
     shares: &[DecryptionShareFast<E>],
     prepared_key_shares: &[E::G2Prepared],
