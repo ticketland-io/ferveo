@@ -5,7 +5,7 @@ use ark_ec::PairingEngine;
 use ark_ff::Field;
 use ark_serialize::*;
 use ark_std::{end_timer, start_timer};
-use ferveo_common::{PublicKey, ExternalValidator};
+use ferveo_common::{ExternalValidator, PublicKey};
 use std::collections::BTreeMap;
 
 /// The DKG context that holds all of the local state for participating in the DKG
@@ -43,12 +43,9 @@ impl<E: PairingEngine> PubliclyVerifiableDkg<E> {
         .ok_or_else(|| anyhow!("unable to construct domain"))?;
 
         // keep track of the owner of this instance in the validator set
-        let me = validators
-            .iter()
-            .position(|probe| me == probe)
-            .context(
-                "could not find this validator in the provided validator set",
-            )?;
+        let me = validators.iter().position(|probe| me == probe).context(
+            "could not find this validator in the provided validator set",
+        )?;
 
         let validators = make_validators(validators);
 
@@ -342,17 +339,15 @@ pub(crate) mod test_common {
         let rng = &mut ark_std::test_rng();
 
         // Gather everyone's transcripts
-        let transcripts = (0..n_validators)
-            .map(|i| {
-                let mut dkg = setup_dkg_for_n_validators(
-                    n_validators,
-                    security_threshold,
-                    shares_num,
-                    i as usize,
-                );
-                dkg.share(rng).expect("Test failed")
-            })
-            .collect::<Vec<_>>();
+        let transcripts = (0..n_validators).map(|i| {
+            let mut dkg = setup_dkg_for_n_validators(
+                n_validators,
+                security_threshold,
+                shares_num,
+                i as usize,
+            );
+            dkg.share(rng).expect("Test failed")
+        });
 
         // Our test dkg
         let mut dkg = setup_dkg_for_n_validators(
@@ -361,16 +356,10 @@ pub(crate) mod test_common {
             shares_num,
             0,
         );
-        transcripts
-            .into_iter()
-            .enumerate()
-            .for_each(|(sender, pvss)| {
-                dkg.apply_message(
-                    dkg.validators[sender].validator.clone(),
-                    pvss,
-                )
+        transcripts.enumerate().for_each(|(sender, pvss)| {
+            dkg.apply_message(dkg.validators[sender].validator.clone(), pvss)
                 .expect("Setup failed");
-            });
+        });
         dkg
     }
 }
