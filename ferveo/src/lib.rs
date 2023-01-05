@@ -42,7 +42,7 @@ mod test_dkg_full {
     use ark_bls12_381::{Bls12_381 as EllipticCurve, Bls12_381, G2Projective};
     use ark_ec::bls12::G2Affine;
     use ark_ff::{Fp12, UniformRand};
-    use ferveo_common::{Keypair, TendermintValidator, ValidatorSet};
+    use ferveo_common::{Keypair, TendermintValidator};
     use group_threshold_cryptography as tpke;
     use group_threshold_cryptography::Ciphertext;
     use itertools::{zip_eq, Itertools};

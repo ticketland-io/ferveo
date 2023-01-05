@@ -1,12 +1,11 @@
 use crate::*;
-use ferveo_common::ValidatorSet;
+use ferveo_common::TendermintValidator;
 use itertools::izip;
 
 pub fn make_validators<E: PairingEngine>(
-    validator_set: ValidatorSet<E>,
+    validators: Vec<TendermintValidator<E>>,
 ) -> Vec<ferveo_common::Validator<E>> {
-    validator_set
-        .validators
+    validators
         .iter()
         .enumerate()
         .map(|(index, validator)| ferveo_common::Validator::<E> {

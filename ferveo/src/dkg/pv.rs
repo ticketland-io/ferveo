@@ -5,7 +5,7 @@ use ark_ec::PairingEngine;
 use ark_ff::Field;
 use ark_serialize::*;
 use ark_std::{end_timer, start_timer};
-use ferveo_common::{PublicKey, TendermintValidator, ValidatorSet};
+use ferveo_common::{PublicKey, TendermintValidator};
 use std::collections::BTreeMap;
 
 /// The DKG context that holds all of the local state for participating in the DKG
@@ -31,7 +31,7 @@ impl<E: PairingEngine> PubliclyVerifiableDkg<E> {
     /// `me` the validator creating this instance
     /// `session_keypair` the keypair for `me`
     pub fn new(
-        validator_set: ValidatorSet<E>,
+        validators: Vec<TendermintValidator<E>>,
         params: Params,
         me: TendermintValidator<E>,
         session_keypair: ferveo_common::Keypair<E>,
@@ -43,15 +43,14 @@ impl<E: PairingEngine> PubliclyVerifiableDkg<E> {
         .ok_or_else(|| anyhow!("unable to construct domain"))?;
 
         // keep track of the owner of this instance in the validator set
-        let me = validator_set
-            .validators
+        let me = validators
             .iter()
             .position(|probe| me.address == probe.address)
             .context(
                 "could not find this validator in the provided validator set",
             )?;
 
-        let validators = make_validators(validator_set);
+        let validators = make_validators(validators);
 
         // TODO: Remove my_partition
         let my_partition =
@@ -277,22 +276,19 @@ pub(crate) mod test_common {
     pub fn gen_n_validators(
         keypairs: &[ferveo_common::Keypair<EllipticCurve>],
         n: u32,
-    ) -> ValidatorSet<EllipticCurve> {
-        ValidatorSet::new(
-            (0..n)
-                .map(|i| TendermintValidator {
-                    power: 1, // TODO: Should set to 1 in order to force partitioning to give one share to each validator. Replace with 1 by reworking how partitioning works.
-                    address: format!("validator_{}", i),
-                    public_key: keypairs[i as usize].public(),
-                })
-                .collect(),
-        )
+    ) -> Vec<TendermintValidator<EllipticCurve>> {
+        (0..n)
+            .map(|i| TendermintValidator {
+                address: format!("validator_{}", i),
+                public_key: keypairs[i as usize].public(),
+            })
+            .collect()
     }
 
     /// Generate a few validators
     pub fn gen_validators(
         keypairs: &[ferveo_common::Keypair<EllipticCurve>],
-    ) -> ValidatorSet<EllipticCurve> {
+    ) -> Vec<TendermintValidator<EllipticCurve>> {
         gen_n_validators(keypairs, 4)
     }
 
@@ -305,7 +301,7 @@ pub(crate) mod test_common {
         let keypairs = gen_n_keypairs(n_validators);
         for _keypair in &keypairs {}
         let validators = gen_n_validators(&keypairs, n_validators);
-        let me = validators.validators[my_index].clone();
+        let me = validators[my_index].clone();
         PubliclyVerifiableDkg::new(
             validators,
             Params {
@@ -400,7 +396,6 @@ mod test_dkg_init {
                 retry_after: 2,
             },
             TendermintValidator::<EllipticCurve> {
-                power: 9001,
                 address: "non-existant-validator".into(),
                 public_key: keypair.public(),
             },
@@ -493,8 +488,7 @@ mod test_dealing {
         ));
         let pvss = dkg.share(rng).expect("Test failed");
         let sender = TendermintValidator::<EllipticCurve> {
-            power: 9001,
-            address: "Goku".into(),
+            address: "fake-address".into(),
             public_key: ferveo_common::Keypair::<EllipticCurve>::new(rng)
                 .public(),
         };
