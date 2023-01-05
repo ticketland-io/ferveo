@@ -6,9 +6,8 @@ use ark_serialize::{
 
 pub mod keypair;
 pub use keypair::*;
-use std::cmp::Ordering;
 
-#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize, PartialEq)]
 /// Represents an external validator
 pub struct ExternalValidator<E: PairingEngine> {
     /// The established address of the validator
@@ -17,51 +16,10 @@ pub struct ExternalValidator<E: PairingEngine> {
     pub public_key: PublicKey<E>,
 }
 
-impl<E: PairingEngine> PartialEq for ExternalValidator<E> {
-    fn eq(&self, other: &Self) -> bool {
-        (&self.address) == (&other.address)
-    }
-}
-
-impl<E: PairingEngine> Eq for ExternalValidator<E> {}
-
-impl<E: PairingEngine> PartialOrd for ExternalValidator<E> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.address.cmp(&other.address))
-    }
-}
-
-impl<E: PairingEngine> Ord for ExternalValidator<E> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.address.cmp(&other.address)
-    }
-}
-
 #[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Validator<E: PairingEngine> {
     pub validator: ExternalValidator<E>,
     pub share_index: usize,
-}
-
-impl<E: PairingEngine> PartialEq for Validator<E> {
-    fn eq(&self, other: &Self) -> bool {
-        (&self.validator, self.share_index)
-            == (&other.validator, other.share_index)
-    }
-}
-
-impl<E: PairingEngine> Eq for Validator<E> {}
-
-impl<E: PairingEngine> PartialOrd for Validator<E> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.validator.cmp(&other.validator))
-    }
-}
-
-impl<E: PairingEngine> Ord for Validator<E> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.validator.cmp(&other.validator)
-    }
 }
 
 impl Rng for ark_std::rand::prelude::StdRng {}
