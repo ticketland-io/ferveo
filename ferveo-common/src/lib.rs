@@ -9,29 +9,29 @@ pub use keypair::*;
 use std::cmp::Ordering;
 
 #[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
-/// Represents a tendermint validator
-pub struct TendermintValidator<E: PairingEngine> {
+/// Represents an external validator
+pub struct ExternalValidator<E: PairingEngine> {
     /// The established address of the validator
     pub address: String,
     /// The Public key
     pub public_key: PublicKey<E>,
 }
 
-impl<E: PairingEngine> PartialEq for TendermintValidator<E> {
+impl<E: PairingEngine> PartialEq for ExternalValidator<E> {
     fn eq(&self, other: &Self) -> bool {
         (&self.address) == (&other.address)
     }
 }
 
-impl<E: PairingEngine> Eq for TendermintValidator<E> {}
+impl<E: PairingEngine> Eq for ExternalValidator<E> {}
 
-impl<E: PairingEngine> PartialOrd for TendermintValidator<E> {
+impl<E: PairingEngine> PartialOrd for ExternalValidator<E> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.address.cmp(&other.address))
     }
 }
 
-impl<E: PairingEngine> Ord for TendermintValidator<E> {
+impl<E: PairingEngine> Ord for ExternalValidator<E> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.address.cmp(&other.address)
     }
@@ -39,7 +39,7 @@ impl<E: PairingEngine> Ord for TendermintValidator<E> {
 
 #[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Validator<E: PairingEngine> {
-    pub validator: TendermintValidator<E>,
+    pub validator: ExternalValidator<E>,
     pub share_index: usize,
 }
 

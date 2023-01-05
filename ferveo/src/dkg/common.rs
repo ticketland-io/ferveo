@@ -1,9 +1,9 @@
 use crate::*;
-use ferveo_common::TendermintValidator;
+use ferveo_common::ExternalValidator;
 use itertools::izip;
 
 pub fn make_validators<E: PairingEngine>(
-    validators: Vec<TendermintValidator<E>>,
+    validators: Vec<ExternalValidator<E>>,
 ) -> Vec<ferveo_common::Validator<E>> {
     validators
         .iter()
