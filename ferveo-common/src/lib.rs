@@ -11,8 +11,6 @@ use std::cmp::Ordering;
 #[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
 /// Represents a tendermint validator
 pub struct TendermintValidator<E: PairingEngine> {
-    /// Total voting power in tendermint consensus
-    pub power: u64,
     /// The established address of the validator
     pub address: String,
     /// The Public key
@@ -21,7 +19,7 @@ pub struct TendermintValidator<E: PairingEngine> {
 
 impl<E: PairingEngine> PartialEq for TendermintValidator<E> {
     fn eq(&self, other: &Self) -> bool {
-        (self.power, &self.address) == (other.power, &other.address)
+        (&self.address) == (&other.address)
     }
 }
 
@@ -29,34 +27,13 @@ impl<E: PairingEngine> Eq for TendermintValidator<E> {}
 
 impl<E: PairingEngine> PartialOrd for TendermintValidator<E> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some((self.power, &self.address).cmp(&(other.power, &other.address)))
+        Some(self.address.cmp(&other.address))
     }
 }
 
 impl<E: PairingEngine> Ord for TendermintValidator<E> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.address.cmp(&other.address)
-    }
-}
-
-#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
-/// The set of tendermint validators for a dkg instance
-pub struct ValidatorSet<E: PairingEngine> {
-    pub validators: Vec<TendermintValidator<E>>,
-}
-
-impl<E: PairingEngine> ValidatorSet<E> {
-    /// Sorts the validators from highest to lowest. This ordering
-    /// first considers staking weight and breaks ties on established
-    /// address
-    pub fn new(validators: Vec<TendermintValidator<E>>) -> Self {
-        Self { validators }
-    }
-
-    /// Get the total voting power of the validator set
-    // TODO: Remove this
-    pub fn total_voting_power(&self) -> u64 {
-        self.validators.iter().map(|v| v.power).sum()
     }
 }
 
