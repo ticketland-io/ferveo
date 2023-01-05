@@ -47,7 +47,7 @@ pub fn setup_dkg(
             shares_num: shares,
             retry_after: 1,
         },
-        me,
+        &me,
         keypairs[validator],
     )
     .expect("Setup failed")

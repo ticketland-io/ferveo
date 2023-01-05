@@ -33,7 +33,7 @@ impl<E: PairingEngine> PubliclyVerifiableDkg<E> {
     pub fn new(
         validators: Vec<ExternalValidator<E>>,
         params: Params,
-        me: ExternalValidator<E>,
+        me: &ExternalValidator<E>,
         session_keypair: ferveo_common::Keypair<E>,
     ) -> Result<Self> {
         use ark_std::UniformRand;
@@ -45,7 +45,7 @@ impl<E: PairingEngine> PubliclyVerifiableDkg<E> {
         // keep track of the owner of this instance in the validator set
         let me = validators
             .iter()
-            .position(|probe| me.address == probe.address)
+            .position(|probe| me == probe)
             .context(
                 "could not find this validator in the provided validator set",
             )?;
@@ -158,7 +158,7 @@ impl<E: PairingEngine> PubliclyVerifiableDkg<E> {
                 // an address keyed hashmap after partitioning the shares shares
                 // in the [`new`] method
                 let sender = self.validators
-                    .iter().position(|probe| sender.address == probe.validator.address)
+                    .iter().position(|probe| sender == &probe.validator)
                     .context("dkg received unknown dealer")?;
                 if self.vss.contains_key(&(sender as u32)) {
                     Err(anyhow!("Repeat dealer {}", sender))
@@ -310,7 +310,7 @@ pub(crate) mod test_common {
                 shares_num,
                 retry_after: 2,
             },
-            me,
+            &me,
             keypairs[my_index],
         )
         .expect("Setup failed")
@@ -395,7 +395,7 @@ mod test_dkg_init {
                 shares_num: 8,
                 retry_after: 2,
             },
-            ExternalValidator::<EllipticCurve> {
+            &ExternalValidator::<EllipticCurve> {
                 address: "non-existant-validator".into(),
                 public_key: keypair.public(),
             },
