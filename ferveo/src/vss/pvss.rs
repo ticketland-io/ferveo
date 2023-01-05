@@ -282,7 +282,7 @@ mod test_pvss {
     use crate::dkg::pv::test_common::*;
     use ark_bls12_381::Bls12_381 as EllipticCurve;
     use ark_ff::UniformRand;
-    use ferveo_common::TendermintValidator;
+    use ferveo_common::ExternalValidator;
 
     type Fr = <EllipticCurve as PairingEngine>::Fr;
     type G1 = <EllipticCurve as PairingEngine>::G1Affine;

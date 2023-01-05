@@ -1,6 +1,6 @@
 pub use ark_bls12_381::Bls12_381 as EllipticCurve;
 use criterion::{criterion_group, criterion_main, Criterion};
-use ferveo_common::TendermintValidator;
+use ferveo_common::ExternalValidator;
 use pprof::criterion::{Output, PProfProfiler};
 
 use ferveo::*;
@@ -47,9 +47,9 @@ pub fn gen_keypairs(num: u64) -> Vec<ferveo_common::Keypair<EllipticCurve>> {
 /// Generate a few validators
 pub fn gen_validators(
     keypairs: &[ferveo_common::Keypair<EllipticCurve>],
-) -> Vec<TendermintValidator<EllipticCurve>> {
+) -> Vec<ExternalValidator<EllipticCurve>> {
     (0..keypairs.len())
-        .map(|i| TendermintValidator {
+        .map(|i| ExternalValidator {
             address: format!("validator_{}", i),
             public_key: keypairs[i].public(),
         })
