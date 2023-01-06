@@ -157,6 +157,7 @@ pub fn bench_create_decryption_share(c: &mut Criterion) {
             }
         };
 
+        group.sample_size(10);
         group.bench_function(
             BenchmarkId::new("share_create_fast", shares_num),
             |b| {
@@ -194,6 +195,7 @@ pub fn bench_share_prepare(c: &mut Criterion) {
             move || black_box(prepare_combine_simple(&setup.pub_contexts))
         };
 
+        group.sample_size(10);
         group.bench_function(
             BenchmarkId::new("share_prepare_fast", shares_num),
             |b| {
@@ -237,6 +239,7 @@ pub fn bench_share_combine(c: &mut Criterion) {
             }
         };
 
+        group.sample_size(10);
         group.bench_function(
             BenchmarkId::new("share_combine_fast", shares_num),
             |b| {
