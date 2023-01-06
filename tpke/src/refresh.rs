@@ -24,6 +24,7 @@ pub fn recover_share_at_point<E: PairingEngine>(
     let new_shares_y =
         update_shares_for_recovery::<E>(other_participants, &share_updates);
 
+    // From the PSS paper, section 4.2.4, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
     // Interpolate new shares to recover y_r
     let shares_x = &other_participants[0]
         .public_decryption_contexts
@@ -44,14 +45,16 @@ fn prepare_share_updates_for_recovery<E: PairingEngine>(
     threshold: usize,
     rng: &mut impl RngCore,
 ) -> HashMap<usize, HashMap<usize, E::G2Projective>> {
+    // From PSS paper, section 4.2.1, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
+
     // TODO: Refactor this function so that each participant performs it individually
     // Each participant prepares an update for each other participant
     participants
         .iter()
         .map(|p1| {
             let i = p1.index;
-            // Generate a new random polynomial with constant term 0
-            let d_i = make_random_polynomial::<E>(threshold, x_r, rng);
+            // Generate a new random polynomial with constant term x_r
+            let d_i = make_random_polynomial_at::<E>(threshold, x_r, rng);
 
             // Now, we need to evaluate the polynomial at each of participants' indices
             let deltas_i: HashMap<_, _> =
@@ -65,6 +68,7 @@ fn update_shares_for_recovery<E: PairingEngine>(
     participants: &[PrivateDecryptionContextSimple<E>],
     deltas: &HashMap<usize, HashMap<usize, E::G2Projective>>,
 ) -> Vec<E::G2Projective> {
+    // From PSS paper, section 4.2.3, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
     // TODO: Refactor this function so that each participant performs it individually
     participants
         .iter()
@@ -81,9 +85,9 @@ fn update_shares_for_recovery<E: PairingEngine>(
         .collect()
 }
 
-fn make_random_polynomial<E: PairingEngine>(
+fn make_random_polynomial_at<E: PairingEngine>(
     threshold: usize,
-    x_r: &E::Fr,
+    root: &E::Fr,
     rng: &mut impl RngCore,
 ) -> Vec<E::Fr> {
     // [][threshold-1]
@@ -95,9 +99,9 @@ fn make_random_polynomial<E: PairingEngine>(
 
     // Now, we calculate d_i_0
     // This is the term that will "zero out" the polynomial at x_r, d_i(x_r) = 0
-    let d_i_0 = E::Fr::zero() - evaluate_polynomial::<E>(&d_i, x_r);
+    let d_i_0 = E::Fr::zero() - evaluate_polynomial::<E>(&d_i, root);
     d_i[0] = d_i_0;
-    assert_eq!(evaluate_polynomial::<E>(&d_i, x_r), E::Fr::zero());
+    assert_eq!(evaluate_polynomial::<E>(&d_i, root), E::Fr::zero());
 
     assert_eq!(d_i.len(), threshold);
 
@@ -122,7 +126,7 @@ fn prepare_share_updates_for_refreshing<E: PairingEngine>(
     threshold: usize,
     rng: &mut impl RngCore,
 ) -> HashMap<usize, E::G2Projective> {
-    let coeffs = make_random_polynomial::<E>(threshold, &E::Fr::zero(), rng);
+    let coeffs = make_random_polynomial_at::<E>(threshold, &E::Fr::zero(), rng);
     compute_polynomial_deltas(participants, &coeffs)
 }
 
