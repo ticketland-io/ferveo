@@ -1,8 +1,9 @@
 use ark_bls12_381::{Fr, G1Affine, G2Affine};
-use ark_std::Zero;
+use ark_bls12_381::{Fr, G1Affine, G2Affine};
 use criterion::{
     black_box, criterion_group, criterion_main, BenchmarkId, Criterion,
 };
+use ark_std::Zero;
 use group_threshold_cryptography::*;
 use rand::prelude::StdRng;
 use rand_core::RngCore;
