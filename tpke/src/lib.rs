@@ -23,7 +23,6 @@ mod combine;
 mod context;
 mod decryption;
 mod hash_to_curve;
-mod key_share;
 mod refresh;
 
 pub use ciphertext::*;
@@ -58,6 +57,8 @@ pub enum ThresholdEncryptionError {
     #[error("plaintext verification failed")]
     PlaintextVerificationFailed,
 }
+
+pub type Result<T> = std::result::Result<T, ThresholdEncryptionError>;
 
 fn hash_to_g2<T: ark_serialize::CanonicalDeserialize>(message: &[u8]) -> T {
     let mut point_ser: Vec<u8> = Vec::new();
@@ -374,55 +375,36 @@ mod tests {
         assert_eq!(msg, plaintext)
     }
 
-    #[test]
-    fn threshold_encryption() {
-        let rng = &mut test_rng();
-        let shares_num = 16;
-        let threshold = shares_num * 2 / 3;
-        let msg: &[u8] = "abc".as_bytes();
-        let aad: &[u8] = "my-aad".as_bytes();
-
-        let (pubkey, _, contexts) = setup_fast::<E>(threshold, shares_num, rng);
-        let mut ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
-
-        let mut shares: Vec<DecryptionShareFast<E>> = vec![];
-        for context in contexts.iter() {
-            shares.push(context.create_share(&ciphertext));
-        }
-
-        /*for pub_context in contexts[0].public_decryption_contexts.iter() {
-            assert!(pub_context
-                .blinded_key_shares
-                .verify_blinding(&pub_context.public_key_shares, rng));
-        }*/
-        let prepared_blinded_key_shares = prepare_combine_fast(
-            &contexts[0].public_decryption_contexts,
-            &shares,
-        );
-        let shared_secret =
-            share_combine_fast(&shares, &prepared_blinded_key_shares);
-
+    fn test_ciphertext_validation_fails<E: PairingEngine>(
+        msg: &[u8],
+        aad: &[u8],
+        ciphertext: &Ciphertext<E>,
+        shared_secret: &E::Fqk,
+    ) {
         // So far, the ciphertext is valid
-        let plaintext = checked_decrypt_with_shared_secret(
-            &ciphertext,
-            aad,
-            &shared_secret,
-        );
+        let plaintext =
+            checked_decrypt_with_shared_secret(ciphertext, aad, shared_secret)
+                .unwrap();
         assert_eq!(plaintext, msg);
 
         // Malformed the ciphertext
+        let mut ciphertext = ciphertext.clone();
         ciphertext.ciphertext[0] += 1;
-        let result = panic::catch_unwind(|| {
-            checked_decrypt_with_shared_secret(&ciphertext, aad, &shared_secret)
-        });
-        assert!(result.is_err());
+        assert!(checked_decrypt_with_shared_secret(
+            &ciphertext,
+            aad,
+            shared_secret
+        )
+        .is_err());
 
         // Malformed the AAD
         let aad = "bad aad".as_bytes();
-        let result = panic::catch_unwind(|| {
-            checked_decrypt_with_shared_secret(&ciphertext, aad, &shared_secret)
-        });
-        assert!(result.is_err());
+        assert!(checked_decrypt_with_shared_secret(
+            &ciphertext,
+            aad,
+            shared_secret
+        )
+        .is_err());
     }
 
     #[test]
@@ -449,6 +431,36 @@ mod tests {
     }
 
     #[test]
+    fn fast_threshold_encryption() {
+        let mut rng = &mut test_rng();
+        let threshold = 16 * 2 / 3;
+        let shares_num = 16;
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
+
+        let (pubkey, _privkey, contexts) =
+            setup::<E>(threshold, shares_num, &mut rng);
+        let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
+
+        let mut shares: Vec<DecryptionShare<E>> = vec![];
+        for context in contexts.iter() {
+            shares.push(context.create_share(&ciphertext));
+        }
+
+        /*for pub_context in contexts[0].public_decryption_contexts.iter() {
+            assert!(pub_context
+                .blinded_key_shares
+                .verify_blinding(&pub_context.public_key_shares, rng));
+        }*/
+        let prepared_blinded_key_shares =
+            prepare_combine(&contexts[0].public_decryption_contexts, &shares);
+        let shared_secret =
+            share_combine(&shares, &prepared_blinded_key_shares);
+
+        test_ciphertext_validation_fails(msg, aad, &ciphertext, &shared_secret);
+    }
+
+    #[test]
     fn simple_threshold_decryption() {
         let rng = &mut test_rng();
         let shares_num = 16;
@@ -460,7 +472,7 @@ mod tests {
             setup_simple::<E>(threshold, shares_num, rng);
 
         // Ciphertext.commitment is already computed to match U
-        let mut ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
+        let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
         // Create decryption shares
         let decryption_shares: Vec<_> = contexts
@@ -475,27 +487,7 @@ mod tests {
         let shared_secret =
             share_combine_simple::<E>(&decryption_shares, &lagrange);
 
-        // So far, the ciphertext is valid
-        let plaintext = checked_decrypt_with_shared_secret(
-            &ciphertext,
-            aad,
-            &shared_secret,
-        );
-        assert_eq!(plaintext, msg);
-
-        // Malformed the ciphertext
-        ciphertext.ciphertext[0] += 1;
-        let result = panic::catch_unwind(|| {
-            checked_decrypt_with_shared_secret(&ciphertext, aad, &shared_secret)
-        });
-        assert!(result.is_err());
-
-        // Malformed the AAD
-        let aad = "bad aad".as_bytes();
-        let result = panic::catch_unwind(|| {
-            checked_decrypt_with_shared_secret(&ciphertext, aad, &shared_secret)
-        });
-        assert!(result.is_err());
+        test_ciphertext_validation_fails(msg, aad, &ciphertext, &shared_secret);
     }
 
     #[test]
