@@ -14,8 +14,8 @@ pub type E = ark_bls12_381::Bls12_381;
 pub type TpkePublicKey = ark_bls12_381::G1Affine;
 pub type TpkePrivateKey = ark_bls12_381::G2Affine;
 pub type TpkeCiphertext = tpke::Ciphertext<E>;
-pub type TpkeDecryptionShare = tpke::DecryptionShare<E>;
-pub type TpkePublicDecryptionContext = tpke::PublicDecryptionContext<E>;
+pub type TpkeDecryptionShare = tpke::DecryptionShareFast<E>;
+pub type TpkePublicDecryptionContext = tpke::PublicDecryptionContextFast<E>;
 pub type TpkeSharedSecret =
     <ark_bls12_381::Bls12_381 as ark_ec::PairingEngine>::Fqk;
 
@@ -168,13 +168,16 @@ impl Setup {
 
         let mut rng = rand::thread_rng();
         let (public_key, private_key, contexts) =
-            tpke::setup::<E>(threshold, shares_num, &mut rng);
+            tpke::setup_fast::<E>(threshold, shares_num, &mut rng);
         let private_contexts = contexts
             .clone()
             .into_iter()
             .map(|x| {
                 PrivateDecryptionContext(
-                    tpke::api::PrivateDecryptionContext::new(&x.b_inv, x.index),
+                    tpke::api::PrivateDecryptionContext::new(
+                        &x.setup_params.b_inv,
+                        x.index,
+                    ),
                 )
             })
             .collect();
@@ -282,9 +285,11 @@ impl SharedSecretBuilder {
         }
 
         let prepared_blinded_key_shares =
-            tpke::prepare_combine(&self.contexts, &self.shares);
-        let shared_secret =
-            tpke::share_combine(&self.shares, &prepared_blinded_key_shares);
+            tpke::prepare_combine_fast(&self.contexts, &self.shares);
+        let shared_secret = tpke::share_combine_fast(
+            &self.shares,
+            &prepared_blinded_key_shares,
+        );
         SharedSecret(shared_secret)
     }
 }

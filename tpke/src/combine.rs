@@ -1,12 +1,13 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
+
 use crate::*;
 use ark_ec::ProjectiveCurve;
 use itertools::zip_eq;
 
-pub fn prepare_combine<E: PairingEngine>(
-    public_decryption_contexts: &[PublicDecryptionContext<E>],
-    shares: &[DecryptionShare<E>],
+pub fn prepare_combine_fast<E: PairingEngine>(
+    public_decryption_contexts: &[PublicDecryptionContextFast<E>],
+    shares: &[DecryptionShareFast<E>],
 ) -> Vec<E::G2Prepared> {
     let mut domain = vec![]; // omega_i, vector of domain points
     let mut n_0 = E::Fr::one();
@@ -42,8 +43,22 @@ pub fn prepare_combine<E: PairingEngine>(
         })
         .collect::<Vec<_>>()
 }
+
 pub fn prepare_combine_simple<E: PairingEngine>(
-    shares_x: &[E::Fr],
+    pub_contexts: &[PublicDecryptionContextSimple<E>],
+) -> Vec<E::Fr> {
+    let shares_x = pub_contexts
+        .iter()
+        .map(|ctxt| ctxt.domain)
+        .collect::<Vec<_>>();
+
+    // In this formula x_i = 0, hence numerator is x_m
+    lagrange_coeffs_at::<E>(&shares_x, &E::Fr::zero())
+}
+
+fn lagrange_coeffs_at<E: PairingEngine>(
+    shares_x: &Vec<E::Fr>,
+    x_i: &E::Fr,
 ) -> Vec<E::Fr> {
     // Calculate lagrange coefficients using optimized formula, see https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
     let mut lagrange_coeffs = vec![];
@@ -51,8 +66,7 @@ pub fn prepare_combine_simple<E: PairingEngine>(
         let mut prod = E::Fr::one();
         for x_m in shares_x {
             if x_j != x_m {
-                // In this formula x_i = 0, hence numerator is x_m
-                prod *= (*x_m) / (*x_m - *x_j);
+                prod *= (*x_m - x_i) / (*x_m - *x_j);
             }
         }
         lagrange_coeffs.push(prod);
@@ -60,8 +74,8 @@ pub fn prepare_combine_simple<E: PairingEngine>(
     lagrange_coeffs
 }
 
-pub fn share_combine<E: PairingEngine>(
-    shares: &[DecryptionShare<E>],
+pub fn share_combine_fast<E: PairingEngine>(
+    shares: &[DecryptionShareFast<E>],
     prepared_key_shares: &[E::G2Prepared],
 ) -> E::Fqk {
     let mut pairing_product: Vec<(E::G1Prepared, E::G2Prepared)> = vec![];
@@ -98,7 +112,6 @@ pub fn share_combine_simple<E: PairingEngine>(
 
 #[cfg(test)]
 mod tests {
-
     type Fr = <ark_bls12_381::Bls12_381 as ark_ec::PairingEngine>::Fr;
 
     #[test]

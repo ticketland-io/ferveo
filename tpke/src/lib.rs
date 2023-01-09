@@ -33,6 +33,7 @@ pub use combine::*;
 
 mod context;
 
+use crate::SetupParams;
 pub use context::*;
 
 // TODO: Turn into a crate features
@@ -81,11 +82,15 @@ fn construct_tag_hash<E: PairingEngine>(
     hash_to_g2(&hash_input)
 }
 
-pub fn setup<E: PairingEngine>(
+pub fn setup_fast<E: PairingEngine>(
     threshold: usize,
     shares_num: usize,
     rng: &mut impl RngCore,
-) -> (E::G1Affine, E::G2Affine, Vec<PrivateDecryptionContext<E>>) {
+) -> (
+    E::G1Affine,
+    E::G2Affine,
+    Vec<PrivateDecryptionContextFast<E>>,
+) {
     assert!(shares_num >= threshold);
 
     // Generators G∈G1, H∈G2
@@ -167,19 +172,21 @@ pub fn setup<E: PairingEngine>(
         // Z_{i,omega_i}) = [dk_{i}^{-1}]*\hat{Y}_{i_omega_j}]
         /*blinded_key_shares.window_tables =
         blinded_key_shares.get_window_table(window_size, scalar_bits, domain_inv);*/
-        private_contexts.push(PrivateDecryptionContext::<E> {
+        private_contexts.push(PrivateDecryptionContextFast::<E> {
             index,
-            b,
-            b_inv: b.inverse().unwrap(),
+            setup_params: SetupParams {
+                b,
+                b_inv: b.inverse().unwrap(),
+                g,
+                g_inv: E::G1Prepared::from(-g),
+                h_inv: E::G2Prepared::from(-h),
+            },
             private_key_share,
             public_decryption_contexts: vec![],
-            g,
-            g_inv: E::G1Prepared::from(-g),
-            h_inv: E::G2Prepared::from(-h),
             scalar_bits,
             window_size,
         });
-        public_contexts.push(PublicDecryptionContext::<E> {
+        public_contexts.push(PublicDecryptionContextFast::<E> {
             domain: domain.to_vec(),
             public_key_shares: PublicKeyShares::<E> {
                 public_key_shares: public.to_vec(),
@@ -262,13 +269,15 @@ pub fn setup_simple<E: PairingEngine>(
         let blinded_key_shares = private_key_share.blind(b);
         private_contexts.push(PrivateDecryptionContextSimple::<E> {
             index,
-            b,
-            b_inv: b.inverse().unwrap(),
+            setup_params: SetupParams {
+                b,
+                b_inv: b.inverse().unwrap(),
+                g,
+                g_inv: E::G1Prepared::from(-g),
+                h_inv: E::G2Prepared::from(-h),
+            },
             private_key_share,
             public_decryption_contexts: vec![],
-            g,
-            g_inv: E::G1Prepared::from(-g),
-            h_inv: E::G2Prepared::from(-h),
         });
         public_contexts.push(PublicDecryptionContextSimple::<E> {
             domain: domain[0],
@@ -307,7 +316,8 @@ mod tests {
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "aad".as_bytes();
 
-        let (pubkey, _privkey, _) = setup::<E>(threshold, shares_num, &mut rng);
+        let (pubkey, _privkey, _) =
+            setup_fast::<E>(threshold, shares_num, &mut rng);
 
         let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
             msg, aad, &pubkey, &mut rng,
@@ -321,15 +331,15 @@ mod tests {
 
     #[test]
     fn decryption_share_serialization() {
-        let decryption_share = DecryptionShare::<E> {
+        let decryption_share = DecryptionShareFast::<E> {
             decrypter_index: 1,
             decryption_share: ark_bls12_381::G1Affine::prime_subgroup_generator(
             ),
         };
 
         let serialized = decryption_share.to_bytes();
-        let deserialized: DecryptionShare<E> =
-            DecryptionShare::from_bytes(&serialized);
+        let deserialized: DecryptionShareFast<E> =
+            DecryptionShareFast::from_bytes(&serialized);
         assert_eq!(serialized, deserialized.to_bytes())
     }
 
@@ -341,7 +351,8 @@ mod tests {
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
-        let (pubkey, privkey, _) = setup::<E>(threshold, shares_num, &mut rng);
+        let (pubkey, privkey, _) =
+            setup_fast::<E>(threshold, shares_num, &mut rng);
 
         let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
             msg, aad, &pubkey, &mut rng,
@@ -374,10 +385,10 @@ mod tests {
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, _privkey, contexts) =
-            setup::<E>(threshold, shares_num, &mut rng);
+            setup_fast::<E>(threshold, shares_num, &mut rng);
         let mut ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
-        let mut shares: Vec<DecryptionShare<E>> = vec![];
+        let mut shares: Vec<DecryptionShareFast<E>> = vec![];
         for context in contexts.iter() {
             shares.push(context.create_share(&ciphertext));
         }
@@ -387,10 +398,12 @@ mod tests {
                 .blinded_key_shares
                 .verify_blinding(&pub_context.public_key_shares, rng));
         }*/
-        let prepared_blinded_key_shares =
-            prepare_combine(&contexts[0].public_decryption_contexts, &shares);
+        let prepared_blinded_key_shares = prepare_combine_fast(
+            &contexts[0].public_decryption_contexts,
+            &shares,
+        );
         let shared_secret =
-            share_combine(&shares, &prepared_blinded_key_shares);
+            share_combine_fast(&shares, &prepared_blinded_key_shares);
 
         // So far, the ciphertext is valid
         let plaintext = checked_decrypt_with_shared_secret(
@@ -423,7 +436,8 @@ mod tests {
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
-        let (pubkey, _privkey, _) = setup::<E>(threshold, shares_num, &mut rng);
+        let (pubkey, _privkey, _) =
+            setup_fast::<E>(threshold, shares_num, &mut rng);
         let mut ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
             msg, aad, &pubkey, &mut rng,
         );
@@ -472,12 +486,9 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let shares_x = &private_decryption_contexts[0]
-            .public_decryption_contexts
-            .iter()
-            .map(|ctxt| ctxt.domain)
-            .collect::<Vec<_>>();
-        let lagrange = prepare_combine_simple::<E>(shares_x);
+        let pub_contexts =
+            &private_decryption_contexts[0].public_decryption_contexts;
+        let lagrange = prepare_combine_simple::<E>(pub_contexts);
 
         let shared_secret =
             share_combine_simple::<E>(&decryption_shares, &lagrange);

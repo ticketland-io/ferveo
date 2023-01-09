@@ -6,12 +6,12 @@ use crate::*;
 use ark_ec::ProjectiveCurve;
 
 #[derive(Debug, Clone)]
-pub struct DecryptionShare<E: PairingEngine> {
+pub struct DecryptionShareFast<E: PairingEngine> {
     pub decrypter_index: usize,
     pub decryption_share: E::G1Affine,
 }
 
-impl<E: PairingEngine> DecryptionShare<E> {
+impl<E: PairingEngine> DecryptionShareFast<E> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         let decrypter_index =
@@ -31,23 +31,23 @@ impl<E: PairingEngine> DecryptionShare<E> {
             CanonicalDeserialize::deserialize(&bytes[INDEX_BYTE_LEN..])
                 .unwrap();
 
-        DecryptionShare {
+        DecryptionShareFast {
             decrypter_index,
             decryption_share,
         }
     }
 }
 
-impl<E: PairingEngine> PrivateDecryptionContext<E> {
+impl<E: PairingEngine> PrivateDecryptionContextFast<E> {
     pub fn create_share(
         &self,
         ciphertext: &Ciphertext<E>,
-    ) -> DecryptionShare<E> {
+    ) -> DecryptionShareFast<E> {
         // let decryption_share =
         //     ciphertext.commitment.mul(self.b_inv).into_affine();
         let decryption_share = ciphertext.commitment;
 
-        DecryptionShare {
+        DecryptionShareFast {
             decrypter_index: self.index,
             decryption_share,
         }
@@ -55,7 +55,7 @@ impl<E: PairingEngine> PrivateDecryptionContext<E> {
     pub fn batch_verify_decryption_shares<R: RngCore>(
         &self,
         ciphertexts: &[Ciphertext<E>],
-        shares: &[Vec<DecryptionShare<E>>],
+        shares: &[Vec<DecryptionShareFast<E>>],
         //ciphertexts_and_shares: &[(Ciphertext<E>, Vec<DecryptionShare<E>>)],
         rng: &mut R,
     ) -> bool {
@@ -95,7 +95,7 @@ impl<E: PairingEngine> PrivateDecryptionContext<E> {
         );
 
         // e(\sum_j [ \sum_i \alpha_{i,j} ] U_j, -H)
-        pairings.push((sum_u_j, self.h_inv.clone()));
+        pairings.push((sum_u_j, self.setup_params.h_inv.clone()));
 
         let mut sum_d_j = vec![E::G1Projective::zero(); num_shares];
 
