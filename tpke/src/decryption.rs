@@ -42,6 +42,12 @@ pub struct DecryptionShareSimple<E: PairingEngine> {
     pub decryption_share: E::Fqk,
 }
 
+#[derive(Debug, Clone)]
+pub struct DecryptionShareSimplePrecomputed<E: PairingEngine> {
+    pub decrypter_index: usize,
+    pub decryption_share: E::Fqk,
+}
+
 #[cfg(test)]
 mod tests {
     use crate::*;
