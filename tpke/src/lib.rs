@@ -142,7 +142,7 @@ pub fn setup_fast<E: PairingEngine>(
     // F_0 - The commitment to the constant term, and is the public key output Y from PVDKG
     // TODO: It seems like the rest of the F_i are not computed?
     let pubkey = g.mul(x);
-    let privkey = h.mul(x); // ek_i in PVSS?
+    let privkey = h.mul(x);
 
     let mut private_contexts = vec![];
     let mut public_contexts = vec![];
@@ -501,7 +501,9 @@ mod tests {
     }
 
     #[test]
-    fn simple_threshold_decryption_with_share_refreshing_at_point() {
+    /// Ñ parties (where t <= Ñ <= N) jointly execute a "share recovery" algorithm, and the output is 1 new share.
+    /// The new share is intended to restore a previously existing share, e.g., due to loss or corruption.
+    fn simple_threshold_decryption_with_share_recovery_at_selected_point() {
         let rng = &mut test_rng();
         let shares_num = 16;
         let threshold = shares_num * 2 / 3;
@@ -527,7 +529,7 @@ mod tests {
             p.public_decryption_contexts.pop();
         }
 
-        // Refresh the share
+        // Recover the share
         let y_r = recover_share_at_point(
             &remaining_participants,
             threshold,
@@ -537,8 +539,38 @@ mod tests {
         assert_eq!(y_r.into_affine(), original_y_r);
     }
 
+    fn make_shared_secret_from_contexts<E: PairingEngine>(
+        contexts: &[PrivateDecryptionContextSimple<E>],
+        ciphertext: &Ciphertext<E>,
+    ) -> E::Fqk {
+        let decryption_shares: Vec<_> = contexts
+            .iter()
+            .map(|ctxt| {
+                make_decryption_share(&ctxt.private_key_share, ciphertext)
+            })
+            .collect();
+        make_shared_secret(
+            &contexts[0].public_decryption_contexts,
+            &decryption_shares,
+        )
+    }
+
+    fn make_shared_secret<E: PairingEngine>(
+        pub_contexts: &[PublicDecryptionContextSimple<E>],
+        decryption_shares: &[E::Fqk],
+    ) -> E::Fqk {
+        let shares_x = pub_contexts
+            .iter()
+            .map(|context| context.domain)
+            .collect::<Vec<_>>();
+        let lagrange = prepare_combine_simple::<E>(&shares_x);
+        share_combine_simple::<E>(decryption_shares, &lagrange)
+    }
+
     #[test]
-    fn simple_threshold_decryption_with_share_recovery_at_point() {
+    /// Ñ parties (where t <= Ñ <= N) jointly execute a "share recovery" algorithm, and the output is 1 new share.
+    /// The new share is independent from the previously existing shares. We can use this to on-board a new participant into an existing cohort.
+    fn simple_threshold_decryption_with_share_recovery_at_random_point() {
         let rng = &mut test_rng();
         let shares_num = 16;
         let threshold = shares_num * 2 / 3;
@@ -549,14 +581,20 @@ mod tests {
             setup_simple::<E>(threshold, shares_num, rng);
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
+        // Create an initial shared secret
+        let old_shared_secret =
+            make_shared_secret_from_contexts(&contexts, &ciphertext);
+
+        // Now, we're going to recover a new share at a random point and check that the shared secret is still the same
+
         // Remove one participant from the contexts and all nested structures
         let mut remaining_participants = contexts;
-        remaining_participants.pop();
+        remaining_participants.pop().unwrap();
         for p in &mut remaining_participants {
-            p.public_decryption_contexts.pop();
+            p.public_decryption_contexts.pop().unwrap();
         }
 
-        // Refresh the share
+        // Recover the share
         let x_r = Fr::rand(rng);
         let y_r = recover_share_at_point(
             &remaining_participants,
@@ -579,26 +617,19 @@ mod tests {
             .push(make_decryption_share(&recovered_key_share, &ciphertext));
 
         // Creating a shared secret from remaining shares and the recovered one
-        let shares_x = &remaining_participants[0]
-            .public_decryption_contexts
-            .iter()
-            .map(|ctxt| ctxt.domain)
-            .collect::<Vec<_>>();
-        let lagrange = prepare_combine_simple::<E>(shares_x);
-
-        let shared_secret =
-            share_combine_simple::<E>(&decryption_shares, &lagrange);
-
-        let plaintext = checked_decrypt_with_shared_secret(
-            &ciphertext,
-            aad,
-            &shared_secret,
+        let new_shared_secret = make_shared_secret(
+            &remaining_participants[0].public_decryption_contexts,
+            &decryption_shares,
         );
-        assert_eq!(plaintext, msg);
+
+        assert_eq!(old_shared_secret, new_shared_secret);
     }
 
+    /// Ñ parties (where t <= Ñ <= N) jointly execute a "share refresh" algorithm.
+    /// The output is M new shares (with M <= Ñ), with each of the M new shares substituting the
+    /// original share (i.e., the original share is deleted).
     #[test]
-    fn simple_threshold_decryption_with_share_refresh() {
+    fn simple_threshold_decryption_with_share_refreshing() {
         let rng = &mut test_rng();
         let shares_num = 16;
         let threshold = shares_num * 2 / 3;
@@ -607,13 +638,20 @@ mod tests {
 
         let (pubkey, _, contexts) =
             setup_simple::<E>(threshold, shares_num, rng);
+        let pub_contexts = contexts[0].public_decryption_contexts.clone();
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
-        // Refresh shares
-        let fresh_shares = refresh_shares::<E>(&contexts, threshold, rng);
+        // Create an initial shared secret
+        let old_shared_secret =
+            make_shared_secret_from_contexts(&contexts, &ciphertext);
 
-        // Creating decryption shares
-        let decryption_shares: Vec<_> = fresh_shares
+        // Now, we're going to refresh the shares and check that the shared secret is the same
+
+        // Refresh shares
+        let new_shares = refresh_shares::<E>(&contexts, threshold, rng);
+
+        // Creating new decryption shares
+        let new_decryption_shares: Vec<_> = new_shares
             .iter()
             .map(|private_share| {
                 let private_share = PrivateKeyShare {
@@ -623,22 +661,9 @@ mod tests {
             })
             .collect();
 
-        // Creating a shared secret from remaining shares and the recovered one
-        let shares_x = &contexts[0]
-            .public_decryption_contexts
-            .iter()
-            .map(|ctxt| ctxt.domain)
-            .collect::<Vec<_>>();
-        let lagrange = prepare_combine_simple::<E>(shares_x);
+        let new_shared_secret =
+            make_shared_secret(&pub_contexts, &new_decryption_shares);
 
-        let shared_secret =
-            share_combine_simple::<E>(&decryption_shares, &lagrange);
-
-        let plaintext = checked_decrypt_with_shared_secret(
-            &ciphertext,
-            aad,
-            &shared_secret,
-        );
-        assert_eq!(plaintext, msg);
+        assert_eq!(old_shared_secret, new_shared_secret);
     }
 }

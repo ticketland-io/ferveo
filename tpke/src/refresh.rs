@@ -1,6 +1,8 @@
 use crate::{lagrange_basis_at, PrivateDecryptionContextSimple};
 use ark_ec::{PairingEngine, ProjectiveCurve};
-use ark_ff::{One, PrimeField, Zero};
+use ark_ff::{PrimeField, Zero};
+use ark_poly::univariate::DensePolynomial;
+use ark_poly::{Polynomial, UVPolynomial};
 use ark_std::UniformRand;
 use itertools::zip_eq;
 use rand::prelude::StdRng;
@@ -39,14 +41,13 @@ pub fn recover_share_at_point<E: PairingEngine>(
     prods.fold(E::G2Projective::zero(), |acc, y_j| acc + y_j)
 }
 
+/// From PSS paper, section 4.2.1, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
 fn prepare_share_updates_for_recovery<E: PairingEngine>(
     participants: &[PrivateDecryptionContextSimple<E>],
     x_r: &E::Fr,
     threshold: usize,
     rng: &mut impl RngCore,
 ) -> HashMap<usize, HashMap<usize, E::G2Projective>> {
-    // From PSS paper, section 4.2.1, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
-
     // TODO: Refactor this function so that each participant performs it individually
     // Each participant prepares an update for each other participant
     participants
@@ -64,11 +65,11 @@ fn prepare_share_updates_for_recovery<E: PairingEngine>(
         .collect::<HashMap<_, _>>()
 }
 
+/// From PSS paper, section 4.2.3, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
 fn update_shares_for_recovery<E: PairingEngine>(
     participants: &[PrivateDecryptionContextSimple<E>],
     deltas: &HashMap<usize, HashMap<usize, E::G2Projective>>,
 ) -> Vec<E::G2Projective> {
-    // From PSS paper, section 4.2.3, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
     // TODO: Refactor this function so that each participant performs it individually
     participants
         .iter()
@@ -89,36 +90,24 @@ fn make_random_polynomial_at<E: PairingEngine>(
     threshold: usize,
     root: &E::Fr,
     rng: &mut impl RngCore,
-) -> Vec<E::Fr> {
+) -> DensePolynomial<E::Fr> {
     // [][threshold-1]
     let mut d_i = (0..threshold - 1)
         .map(|_| E::Fr::rand(rng))
         .collect::<Vec<_>>();
     // [0..][threshold]
     d_i.insert(0, E::Fr::zero());
+    let mut d_i = DensePolynomial::from_coefficients_vec(d_i);
 
     // Now, we calculate d_i_0
     // This is the term that will "zero out" the polynomial at x_r, d_i(x_r) = 0
-    let d_i_0 = E::Fr::zero() - evaluate_polynomial::<E>(&d_i, root);
+    let d_i_0 = E::Fr::zero() - d_i.evaluate(root);
     d_i[0] = d_i_0;
-    assert_eq!(evaluate_polynomial::<E>(&d_i, root), E::Fr::zero());
 
-    assert_eq!(d_i.len(), threshold);
+    debug_assert!(d_i.evaluate(root) == E::Fr::zero());
+    debug_assert!(d_i.len() == threshold);
 
     d_i
-}
-
-fn evaluate_polynomial<E: PairingEngine>(
-    polynomial: &[E::Fr],
-    x: &E::Fr,
-) -> E::Fr {
-    let mut result = E::Fr::zero();
-    let mut x_power = E::Fr::one();
-    for coeff in polynomial {
-        result += *coeff * x_power;
-        x_power *= x;
-    }
-    result
 }
 
 fn prepare_share_updates_for_refreshing<E: PairingEngine>(
@@ -126,21 +115,22 @@ fn prepare_share_updates_for_refreshing<E: PairingEngine>(
     threshold: usize,
     rng: &mut impl RngCore,
 ) -> HashMap<usize, E::G2Projective> {
-    let coeffs = make_random_polynomial_at::<E>(threshold, &E::Fr::zero(), rng);
-    compute_polynomial_deltas(participants, &coeffs)
+    let polynomial =
+        make_random_polynomial_at::<E>(threshold, &E::Fr::zero(), rng);
+    compute_polynomial_deltas(participants, &polynomial)
 }
 
 fn compute_polynomial_deltas<E: PairingEngine>(
     participants: &[PrivateDecryptionContextSimple<E>],
-    coeffs: &[E::Fr],
+    polynomial: &DensePolynomial<E::Fr>,
 ) -> HashMap<usize, E::G2Projective> {
+    let h_g2 = E::G2Projective::from(participants[0].h);
     participants
         .iter()
         .map(|p| {
             let i = p.index;
             let x_i = p.public_decryption_contexts[i].domain;
-            let eval = evaluate_polynomial::<E>(coeffs, &x_i);
-            let h_g2 = E::G2Projective::from(p.h);
+            let eval = polynomial.evaluate(&x_i);
             let eval_g2 = h_g2.mul(eval.into_repr());
             (i, eval_g2)
         })
