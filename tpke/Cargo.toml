@@ -38,6 +38,7 @@ criterion = { version = "0.4", features = ["html_reports"] }
 
 [[bench]]
 name = "benchmarks"
+path = "benches/lib.rs"
 harness = false
 
 [profile.release]

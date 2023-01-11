@@ -1,8 +1,6 @@
 use ark_bls12_381::{Fr, G1Affine, G2Affine};
 use ark_bls12_381::{Fr, G1Affine, G2Affine};
-use criterion::{
-    black_box, criterion_group, criterion_main, BenchmarkId, Criterion,
-};
+use criterion::{black_box, criterion_group, BenchmarkId, Criterion};
 use ark_std::Zero;
 use group_threshold_cryptography::*;
 use rand::prelude::StdRng;
@@ -377,4 +375,3 @@ criterion_group!(
     bench_share_encrypt_decrypt,
     bench_random_poly
 );
-criterion_main!(benches);
