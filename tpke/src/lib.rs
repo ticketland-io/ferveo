@@ -177,6 +177,7 @@ pub fn setup_fast<E: PairingEngine>(
                 g,
                 g_inv: E::G1Prepared::from(-g),
                 h_inv: E::G2Prepared::from(-h),
+                h,
             },
             private_key_share,
             public_decryption_contexts: vec![],
@@ -272,6 +273,7 @@ pub fn setup_simple<E: PairingEngine>(
                 g,
                 g_inv: E::G1Prepared::from(-g),
                 h_inv: E::G2Prepared::from(-h),
+                h,
             },
             private_key_share,
             public_decryption_contexts: vec![],
@@ -332,8 +334,7 @@ mod tests {
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
-        let (pubkey, _, _) =
-            setup_fast::<E>(threshold, shares_num, rng);
+        let (pubkey, _, _) = setup_fast::<E>(threshold, shares_num, rng);
 
         let ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
 
@@ -365,8 +366,7 @@ mod tests {
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
-        let (pubkey, privkey, _) =
-            setup_fast::<E>(threshold, shares_num, rng);
+        let (pubkey, privkey, _) = setup_fast::<E>(threshold, shares_num, rng);
 
         let ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
         let plaintext = checked_decrypt(&ciphertext, aad, privkey);
@@ -433,8 +433,7 @@ mod tests {
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
-        let (pubkey, _, _) =
-            setup_fast::<E>(threshold, shares_num, rng);
+        let (pubkey, _, _) = setup_fast::<E>(threshold, shares_num, rng);
         let mut ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
 
         // So far, the ciphertext is valid
@@ -470,8 +469,7 @@ mod tests {
                 make_decryption_share(&ctxt.private_key_share, &ciphertext)
             })
             .collect();
-        let pub_contexts =
-            &contexts[0].public_decryption_contexts;
+        let pub_contexts = &contexts[0].public_decryption_contexts;
         let lagrange = prepare_combine_simple::<E>(pub_contexts);
 
         let shared_secret =
@@ -559,11 +557,7 @@ mod tests {
         pub_contexts: &[PublicDecryptionContextSimple<E>],
         decryption_shares: &[E::Fqk],
     ) -> E::Fqk {
-        let shares_x = pub_contexts
-            .iter()
-            .map(|context| context.domain)
-            .collect::<Vec<_>>();
-        let lagrange = prepare_combine_simple::<E>(&shares_x);
+        let lagrange = prepare_combine_simple::<E>(pub_contexts);
         share_combine_simple::<E>(decryption_shares, &lagrange)
     }
 

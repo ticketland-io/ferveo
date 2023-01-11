@@ -124,7 +124,7 @@ fn compute_polynomial_deltas<E: PairingEngine>(
     participants: &[PrivateDecryptionContextSimple<E>],
     polynomial: &DensePolynomial<E::Fr>,
 ) -> HashMap<usize, E::G2Projective> {
-    let h_g2 = E::G2Projective::from(participants[0].h);
+    let h_g2 = E::G2Projective::from(participants[0].setup_params.h);
     participants
         .iter()
         .map(|p| {
