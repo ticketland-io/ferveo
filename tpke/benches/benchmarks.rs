@@ -21,12 +21,12 @@ pub fn bench_decryption(c: &mut Criterion) {
         let threshold = num_shares * 2 / 3;
 
         let (pubkey, _, contexts) =
-            setup::<E>(threshold, num_shares, num_entities, &mut rng);
+            setup_fast::<E>(threshold, num_shares, &mut rng);
 
         // let mut messages: Vec<[u8; NUM_OF_TX]> = vec![];
         let mut messages: Vec<Vec<u8>> = vec![];
         let mut ciphertexts: Vec<Ciphertext<E>> = vec![];
-        let mut dec_shares: Vec<Vec<DecryptionShare<E>>> =
+        let mut dec_shares: Vec<Vec<DecryptionShareFast<E>>> =
             Vec::with_capacity(ciphertexts.len());
         for j in 0..num_msg {
             // let mut msg: [u8; NUM_OF_TX] = [0u8; NUM_OF_TX];
@@ -41,16 +41,16 @@ pub fn bench_decryption(c: &mut Criterion) {
                 dec_shares[j].push(ctx.create_share(&ciphertexts[j]));
             }
         }
-        let prepared_blinded_key_shares = prepare_combine(
+        let prepared_blinded_key_shares = prepare_combine_fast(
             &contexts[0].public_decryption_contexts,
             &dec_shares[0],
         );
 
         move || {
-            let shares: Vec<Vec<DecryptionShare<E>>> = dec_shares.clone();
+            let shares: Vec<Vec<DecryptionShareFast<E>>> = dec_shares.clone();
 
             for i in 0..ciphertexts.len() {
-                black_box(share_combine(
+                black_box(share_combine_fast(
                     &shares[i],
                     &prepared_blinded_key_shares,
                 ));
@@ -71,12 +71,12 @@ pub fn bench_decryption(c: &mut Criterion) {
         let threshold = num_shares * 2 / 3;
 
         let (pubkey, _, contexts) =
-            setup::<E>(threshold, num_shares, num_entities, &mut rng);
+            setup_fast::<E>(threshold, num_shares, &mut rng);
 
         // let mut messages: Vec<[u8; NUM_OF_TX]> = vec![];
         let mut messages: Vec<Vec<u8>> = vec![];
         let mut ciphertexts: Vec<Ciphertext<E>> = vec![];
-        let mut dec_shares: Vec<Vec<DecryptionShare<E>>> =
+        let mut dec_shares: Vec<Vec<DecryptionShareFast<E>>> =
             Vec::with_capacity(ciphertexts.len());
         for j in 0..num_msg {
             // let mut msg: [u8; NUM_OF_TX] = [0u8; NUM_OF_TX];
@@ -95,16 +95,16 @@ pub fn bench_decryption(c: &mut Criterion) {
         move || {
             let rng = &mut ark_std::test_rng();
             let c: Vec<Ciphertext<E>> = ciphertexts.clone();
-            let shares: Vec<Vec<DecryptionShare<E>>> = dec_shares.clone();
+            let shares: Vec<Vec<DecryptionShareFast<E>>> = dec_shares.clone();
 
             contexts[0].batch_verify_decryption_shares(&c, &shares, rng);
-            let prepared_blinded_key_shares = prepare_combine(
+            let prepared_blinded_key_shares = prepare_combine_fast(
                 &contexts[0].public_decryption_contexts,
                 &dec_shares[0],
             );
 
             for i in 0..ciphertexts.len() {
-                black_box(share_combine(
+                black_box(share_combine_fast(
                     &shares[i],
                     &prepared_blinded_key_shares,
                 ));
@@ -128,7 +128,8 @@ pub fn bench_decryption(c: &mut Criterion) {
                     );
                     group.measurement_time(core::time::Duration::new(30, 0));
                     group.bench_function(format!("share_combine: {} validators threshold {}*2/3 - #msg {} - msg-size = {} bytes", num_validators, num_shares, msg_num, msg_size), |b| {
-                b.iter(|| a())
+                    #[allow(clippy::redundant_closure)]
+                    b.iter(|| a())
             });
 
                     /*                let a = block_propose_bench(msg_num, num_shares, 150, msg_size);

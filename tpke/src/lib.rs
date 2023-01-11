@@ -1,10 +1,11 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
+
 use crate::hash_to_curve::htp_bls12381_g2;
 use ark_ec::{msm::FixedBaseMSM, AffineCurve, PairingEngine};
 use ark_ff::{Field, One, PrimeField, ToBytes, UniformRand, Zero};
-use ark_poly::EvaluationDomain;
 use ark_poly::{univariate::DensePolynomial, UVPolynomial};
+use ark_poly::{EvaluationDomain, Polynomial};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::izip;
 use subproductdomain::SubproductDomain;
@@ -15,14 +16,24 @@ use thiserror::Error;
 
 mod ciphertext;
 mod hash_to_curve;
+
 pub use ciphertext::*;
+
 mod key_share;
+
 pub use key_share::*;
+
 mod decryption;
+
 pub use decryption::*;
+
 mod combine;
+
 pub use combine::*;
+
 mod context;
+
+use crate::SetupParams;
 pub use context::*;
 
 // TODO: Turn into a crate features
@@ -32,6 +43,7 @@ pub mod serialization;
 pub trait ThresholdEncryptionParameters {
     type E: PairingEngine;
 }
+
 #[derive(Debug, Error)]
 pub enum ThresholdEncryptionError {
     /// Error
@@ -70,21 +82,27 @@ fn construct_tag_hash<E: PairingEngine>(
     hash_to_g2(&hash_input)
 }
 
-pub fn setup<E: PairingEngine>(
+pub fn setup_fast<E: PairingEngine>(
     threshold: usize,
     shares_num: usize,
-    num_entities: usize,
     rng: &mut impl RngCore,
-) -> (E::G1Affine, E::G2Affine, Vec<PrivateDecryptionContext<E>>) {
+) -> (
+    E::G1Affine,
+    E::G2Affine,
+    Vec<PrivateDecryptionContextFast<E>>,
+) {
+    assert!(shares_num >= threshold);
+
+    // Generators G∈G1, H∈G2
     let g = E::G1Affine::prime_subgroup_generator();
     let h = E::G2Affine::prime_subgroup_generator();
-    let _g_inv = E::G1Prepared::from(-g);
-    let _h_inv = E::G2Prepared::from(-h);
 
-    assert!(shares_num >= threshold);
+    // The dealer chooses a uniformly random polynomial f of degree t-1
     let threshold_poly = DensePolynomial::<E::Fr>::rand(threshold - 1, rng);
+    // Domain, or omega Ω
     let fft_domain =
         ark_poly::Radix2EvaluationDomain::<E::Fr>::new(shares_num).unwrap();
+    // `evals` are evaluations of the polynomial f over the domain, omega: f(ω_j) for ω_j in Ω
     let evals = threshold_poly.evaluate_over_domain_by_ref(fft_domain);
 
     let mut domain_points = Vec::with_capacity(shares_num);
@@ -92,8 +110,16 @@ pub fn setup<E: PairingEngine>(
     let mut domain_points_inv = Vec::with_capacity(shares_num);
     let mut point_inv = E::Fr::one();
 
+    // domain_points are the powers of the generator g
+    // domain_points_inv are the powers of the inverse of the generator g
+    // It seems like domain points are being used in "share partitioning"
+    // https://nikkolasg.github.io/ferveo/dkginit.html#share-partitioning
+    // There's also a mention of this operation here:
+    // "DKG.PartitionDomain({ek_i, s_i}) -> {(ek_i, Omega_i)}"
+    // https://nikkolasg.github.io/ferveo/tpke-concrete.html
     for _ in 0..shares_num {
-        domain_points.push(point);
+        // domain_points is the share domain of the i-th participant (?)
+        domain_points.push(point); // 1, t, t^2, t^3, ...; where t is a scalar generator fft_domain.group_gen
         point *= fft_domain.group_gen;
         domain_points_inv.push(point_inv);
         point_inv *= fft_domain.group_gen_inv;
@@ -102,57 +128,163 @@ pub fn setup<E: PairingEngine>(
     let window_size = FixedBaseMSM::get_mul_window_size(100);
     let scalar_bits = E::Fr::size_in_bits();
 
+    // A - public key shares of participants
     let pubkey_shares =
         subproductdomain::fast_multiexp(&evals.evals, g.into_projective());
+    let pubkey_share = g.mul(evals.evals[0]);
+    assert!(pubkey_shares[0] == E::G1Affine::from(pubkey_share));
+
+    // Y, but only when b = 1 - private key shares of participants
     let privkey_shares =
         subproductdomain::fast_multiexp(&evals.evals, h.into_projective());
+    // h^{f(omega)}
 
+    // a_0
     let x = threshold_poly.coeffs[0];
+
+    // F_0 - The commitment to the constant term, and is the public key output Y from PVDKG
+    // TODO: It seems like the rest of the F_i are not computed?
     let pubkey = g.mul(x);
     let privkey = h.mul(x);
 
     let mut private_contexts = vec![];
     let mut public_contexts = vec![];
 
+    // (domain, domain_inv, A, Y)
     for (index, (domain, domain_inv, public, private)) in izip!(
-        domain_points.chunks(shares_num / num_entities),
-        domain_points_inv.chunks(shares_num / num_entities),
-        pubkey_shares.chunks(shares_num / num_entities),
-        privkey_shares.chunks(shares_num / num_entities)
+        // Since we're assigning only one key share to one entity we can use chunks(1)
+        // This is a quick workaround to avoid refactoring all related entities that assume there are multiple key shares
+        // TODO: Refactor this code and all related code
+        domain_points.chunks(1),
+        domain_points_inv.chunks(1),
+        pubkey_shares.chunks(1),
+        privkey_shares.chunks(1)
     )
     .enumerate()
     {
         let private_key_share = PrivateKeyShare::<E> {
             private_key_shares: private.to_vec(),
         };
-        let b = E::Fr::rand(rng);
+        let b = E::Fr::one(); // TODO: Not blinding for now
         let mut blinded_key_shares = private_key_share.blind(b);
         blinded_key_shares.multiply_by_omega_inv(domain_inv);
+        // TODO: Is `blinded_key_shares` equal to [b]Z_{i,omega_i})?
+        // Z_{i,omega_i}) = [dk_{i}^{-1}]*\hat{Y}_{i_omega_j}]
         /*blinded_key_shares.window_tables =
         blinded_key_shares.get_window_table(window_size, scalar_bits, domain_inv);*/
-        private_contexts.push(PrivateDecryptionContext::<E> {
+        private_contexts.push(PrivateDecryptionContextFast::<E> {
             index,
-            b,
-            b_inv: b.inverse().unwrap(),
+            setup_params: SetupParams {
+                b,
+                b_inv: b.inverse().unwrap(),
+                g,
+                g_inv: E::G1Prepared::from(-g),
+                h_inv: E::G2Prepared::from(-h),
+            },
             private_key_share,
             public_decryption_contexts: vec![],
-            g,
-            g_inv: E::G1Prepared::from(-g),
-            h_inv: E::G2Prepared::from(-h),
             scalar_bits,
             window_size,
         });
-        let mut lagrange_n_0 = domain.iter().product::<E::Fr>();
-        if domain.len() % 2 == 1 {
-            lagrange_n_0 = -lagrange_n_0;
-        }
-        public_contexts.push(PublicDecryptionContext::<E> {
+        public_contexts.push(PublicDecryptionContextFast::<E> {
             domain: domain.to_vec(),
             public_key_shares: PublicKeyShares::<E> {
                 public_key_shares: public.to_vec(),
             },
             blinded_key_shares,
-            lagrange_n_0,
+            lagrange_n_0: domain.iter().product::<E::Fr>(),
+        });
+    }
+    for private in private_contexts.iter_mut() {
+        private.public_decryption_contexts = public_contexts.clone();
+    }
+
+    (pubkey.into(), privkey.into(), private_contexts)
+}
+
+pub fn setup_simple<E: PairingEngine>(
+    threshold: usize,
+    shares_num: usize,
+    rng: &mut impl RngCore,
+) -> (
+    E::G1Affine,
+    E::G2Affine,
+    Vec<PrivateDecryptionContextSimple<E>>,
+) {
+    assert!(shares_num >= threshold);
+
+    let g = E::G1Affine::prime_subgroup_generator();
+    let h = E::G2Affine::prime_subgroup_generator();
+
+    // The delear chooses a uniformly random polynomial f of degree t-1
+    let threshold_poly = DensePolynomial::<E::Fr>::rand(threshold - 1, rng);
+    // Domain, or omega Ω
+    let fft_domain =
+        ark_poly::Radix2EvaluationDomain::<E::Fr>::new(shares_num).unwrap();
+    // `evals` are evaluations of the polynomial f over the domain, omega: f(ω_j) for ω_j in Ω
+    let evals = threshold_poly.evaluate_over_domain_by_ref(fft_domain);
+
+    let shares_x = fft_domain.elements().collect::<Vec<_>>();
+
+    // A - public key shares of participants
+    let pubkey_shares =
+        subproductdomain::fast_multiexp(&evals.evals, g.into_projective());
+    let pubkey_share = g.mul(evals.evals[0]);
+    assert!(pubkey_shares[0] == E::G1Affine::from(pubkey_share));
+
+    // Y, but only when b = 1 - private key shares of participants
+    // Z_i = h^{f(omega)} ?
+    let privkey_shares =
+        subproductdomain::fast_multiexp(&evals.evals, h.into_projective());
+
+    // a_0
+    let x = threshold_poly.coeffs[0];
+    // F_0
+    // TODO: It seems like the rest of the F_i are not computed?
+    let pubkey = g.mul(x);
+    let privkey = h.mul(x);
+
+    let secret = threshold_poly.evaluate(&E::Fr::zero());
+    assert_eq!(secret, x);
+
+    let mut private_contexts = vec![];
+    let mut public_contexts = vec![];
+
+    // (domain, A, Y)
+    for (index, (domain, public, private)) in izip!(
+        // Since we're assigning only one key share to one entity we can use chunks(1)
+        // This is a quick workaround to avoid refactoring all related entities that assume there are multiple key shares
+        // TODO: Refactor this code and all related code
+        shares_x.chunks(1),
+        pubkey_shares.chunks(1),
+        privkey_shares.chunks(1)
+    )
+    .enumerate()
+    {
+        let private_key_share = PrivateKeyShare::<E> {
+            private_key_shares: private.to_vec(),
+        };
+        // let b = E::Fr::rand(rng);
+        let b = E::Fr::one(); // TODO: Not blinding for now
+        let blinded_key_shares = private_key_share.blind(b);
+        private_contexts.push(PrivateDecryptionContextSimple::<E> {
+            index,
+            setup_params: SetupParams {
+                b,
+                b_inv: b.inverse().unwrap(),
+                g,
+                g_inv: E::G1Prepared::from(-g),
+                h_inv: E::G2Prepared::from(-h),
+            },
+            private_key_share,
+            public_decryption_contexts: vec![],
+        });
+        public_contexts.push(PublicDecryptionContextSimple::<E> {
+            domain: domain[0],
+            public_key_shares: PublicKeyShares::<E> {
+                public_key_shares: public.to_vec(),
+            },
+            blinded_key_shares,
         });
     }
     for private in private_contexts.iter_mut() {
@@ -180,13 +312,12 @@ mod tests {
     fn ciphertext_serialization() {
         let mut rng = test_rng();
         let threshold = 3;
-        let shares_num = 5;
-        let num_entities = 5;
+        let shares_num = 8;
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "aad".as_bytes();
 
         let (pubkey, _privkey, _) =
-            setup::<E>(threshold, shares_num, num_entities, &mut rng);
+            setup_fast::<E>(threshold, shares_num, &mut rng);
 
         let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
             msg, aad, &pubkey, &mut rng,
@@ -195,20 +326,20 @@ mod tests {
         let serialized = ciphertext.to_bytes();
         let deserialized: Ciphertext<E> = Ciphertext::from_bytes(&serialized);
 
-        assert!(serialized == deserialized.to_bytes())
+        assert_eq!(serialized, deserialized.to_bytes())
     }
 
     #[test]
     fn decryption_share_serialization() {
-        let decryption_share = DecryptionShare::<E> {
+        let decryption_share = DecryptionShareFast::<E> {
             decrypter_index: 1,
             decryption_share: ark_bls12_381::G1Affine::prime_subgroup_generator(
             ),
         };
 
         let serialized = decryption_share.to_bytes();
-        let deserialized: DecryptionShare<E> =
-            DecryptionShare::from_bytes(&serialized);
+        let deserialized: DecryptionShareFast<E> =
+            DecryptionShareFast::from_bytes(&serialized);
         assert_eq!(serialized, deserialized.to_bytes())
     }
 
@@ -216,13 +347,12 @@ mod tests {
     fn symmetric_encryption() {
         let mut rng = test_rng();
         let threshold = 3;
-        let shares_num = 5;
-        let num_entities = 5;
+        let shares_num = 8;
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, privkey, _) =
-            setup::<E>(threshold, shares_num, num_entities, &mut rng);
+            setup_fast::<E>(threshold, shares_num, &mut rng);
 
         let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
             msg, aad, &pubkey, &mut rng,
@@ -235,6 +365,7 @@ mod tests {
     // Source: https://stackoverflow.com/questions/26469715/how-do-i-write-a-rust-unit-test-that-ensures-that-a-panic-has-occurred
     // TODO: Remove after adding proper error handling to the library
     use std::panic;
+
     fn catch_unwind_silent<F: FnOnce() -> R + panic::UnwindSafe, R>(
         f: F,
     ) -> std::thread::Result<R> {
@@ -250,15 +381,14 @@ mod tests {
         let mut rng = &mut test_rng();
         let threshold = 16 * 2 / 3;
         let shares_num = 16;
-        let num_entities = 5;
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, _privkey, contexts) =
-            setup::<E>(threshold, shares_num, num_entities, &mut rng);
+            setup_fast::<E>(threshold, shares_num, &mut rng);
         let mut ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
-        let mut shares: Vec<DecryptionShare<E>> = vec![];
+        let mut shares: Vec<DecryptionShareFast<E>> = vec![];
         for context in contexts.iter() {
             shares.push(context.create_share(&ciphertext));
         }
@@ -268,26 +398,32 @@ mod tests {
                 .blinded_key_shares
                 .verify_blinding(&pub_context.public_key_shares, rng));
         }*/
-        let prepared_blinded_key_shares =
-            prepare_combine(&contexts[0].public_decryption_contexts, &shares);
-        let s = share_combine(&shares, &prepared_blinded_key_shares);
+        let prepared_blinded_key_shares = prepare_combine_fast(
+            &contexts[0].public_decryption_contexts,
+            &shares,
+        );
+        let shared_secret =
+            share_combine_fast(&shares, &prepared_blinded_key_shares);
 
         // So far, the ciphertext is valid
-        let plaintext =
-            checked_decrypt_with_shared_secret(&ciphertext, aad, &s);
+        let plaintext = checked_decrypt_with_shared_secret(
+            &ciphertext,
+            aad,
+            &shared_secret,
+        );
         assert_eq!(plaintext, msg);
 
         // Malformed the ciphertext
         ciphertext.ciphertext[0] += 1;
         let result = std::panic::catch_unwind(|| {
-            checked_decrypt_with_shared_secret(&ciphertext, aad, &s)
+            checked_decrypt_with_shared_secret(&ciphertext, aad, &shared_secret)
         });
         assert!(result.is_err());
 
         // Malformed the AAD
         let aad = "bad aad".as_bytes();
         let result = std::panic::catch_unwind(|| {
-            checked_decrypt_with_shared_secret(&ciphertext, aad, &s)
+            checked_decrypt_with_shared_secret(&ciphertext, aad, &shared_secret)
         });
         assert!(result.is_err());
     }
@@ -296,13 +432,12 @@ mod tests {
     fn ciphertext_validity_check() {
         let mut rng = test_rng();
         let threshold = 3;
-        let shares_num = 5;
-        let num_entities = 5;
+        let shares_num = 8;
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, _privkey, _) =
-            setup::<E>(threshold, shares_num, num_entities, &mut rng);
+            setup_fast::<E>(threshold, shares_num, &mut rng);
         let mut ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
             msg, aad, &pubkey, &mut rng,
         );
@@ -317,5 +452,67 @@ mod tests {
         // Malformed the AAD
         let aad = "bad aad".as_bytes();
         assert!(!check_ciphertext_validity(&ciphertext, aad));
+    }
+
+    #[test]
+    fn simple_threshold_decryption() {
+        let mut rng = &mut test_rng();
+        let threshold = 16 * 2 / 3;
+        let shares_num = 16;
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
+
+        // To be updated
+        let (pubkey, _privkey, private_decryption_contexts) =
+            setup_simple::<E>(threshold, shares_num, &mut rng);
+
+        // Stays the same
+        // Ciphertext.commitment is already computed to match U
+        let mut ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
+
+        // Creating decryption shares
+        let decryption_shares = private_decryption_contexts
+            .iter()
+            .map(|context| {
+                let u = ciphertext.commitment;
+                let z_i = context.private_key_share.clone();
+                // Simplifying to just one key share per node
+                assert_eq!(z_i.private_key_shares.len(), 1);
+                let z_i = z_i.private_key_shares[0];
+                // Really want to call E::pairing here to avoid heavy computations on client side
+                // C_i = e(U, Z_i)
+                // TODO: Check whether blinded key share fits here
+                E::pairing(u, z_i)
+            })
+            .collect::<Vec<_>>();
+
+        let pub_contexts =
+            &private_decryption_contexts[0].public_decryption_contexts;
+        let lagrange = prepare_combine_simple::<E>(pub_contexts);
+
+        let shared_secret =
+            share_combine_simple::<E>(&decryption_shares, &lagrange);
+
+        // So far, the ciphertext is valid
+        let plaintext = checked_decrypt_with_shared_secret(
+            &ciphertext,
+            aad,
+            &shared_secret,
+        );
+        assert_eq!(plaintext, msg);
+
+        // Malformed the ciphertext
+        ciphertext.ciphertext[0] += 1;
+        let result = std::panic::catch_unwind(|| {
+            checked_decrypt_with_shared_secret(&ciphertext, aad, &shared_secret)
+        });
+        assert!(result.is_err());
+
+        // Malformed the AAD
+        let aad = "bad aad".as_bytes();
+        let result = std::panic::catch_unwind(|| {
+            checked_decrypt_with_shared_secret(&ciphertext, aad, &shared_secret)
+        });
+        assert!(result.is_err());
     }
 }
