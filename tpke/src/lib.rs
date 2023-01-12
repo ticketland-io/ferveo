@@ -271,12 +271,23 @@ pub fn generate_random<R: RngCore, E: PairingEngine>(
     (0..n).map(|_| E::Fr::rand(rng)).collect::<Vec<_>>()
 }
 
+fn make_decryption_share<E: PairingEngine>(
+    private_share: &PrivateKeyShare<E>,
+    ciphertext: &Ciphertext<E>,
+) -> E::Fqk {
+    let z_i = private_share;
+    let u = ciphertext.commitment;
+    let z_i = z_i.private_key_shares[0];
+    E::pairing(u, z_i)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::*;
     use ark_bls12_381::Fr;
     use ark_ec::ProjectiveCurve;
     use ark_std::test_rng;
+    use itertools::Itertools;
     use rand::prelude::StdRng;
 
     type E = ark_bls12_381::Bls12_381;

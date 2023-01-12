@@ -99,7 +99,7 @@ pub fn share_combine_simple<E: PairingEngine>(
 pub fn share_combine_simple_precomputed<E: PairingEngine>(
     shares: &[DecryptionShareSimplePrecomputed<E>],
 ) -> E::Fqk {
-    // TODO: Add formulas
+    // $s = ∏C_{λ_i}$, where $λ_i$ is the Lagrange coefficient for $i$.
     shares
         .iter()
         .fold(E::Fqk::one(), |acc, c_i| acc * c_i.decryption_share)
