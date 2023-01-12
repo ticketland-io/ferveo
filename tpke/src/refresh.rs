@@ -1,8 +1,7 @@
 use crate::{lagrange_basis_at, PrivateDecryptionContextSimple};
 use ark_ec::{PairingEngine, ProjectiveCurve};
 use ark_ff::{PrimeField, Zero};
-use ark_poly::univariate::DensePolynomial;
-use ark_poly::{Polynomial, UVPolynomial};
+use ark_poly::{univariate::DensePolynomial, Polynomial, UVPolynomial};
 use ark_std::UniformRand;
 use itertools::zip_eq;
 use rand::prelude::StdRng;
@@ -86,7 +85,7 @@ fn update_shares_for_recovery<E: PairingEngine>(
         .collect()
 }
 
-fn make_random_polynomial_at<E: PairingEngine>(
+pub fn make_random_polynomial_at<E: PairingEngine>(
     threshold: usize,
     root: &E::Fr,
     rng: &mut impl RngCore,
@@ -108,6 +107,20 @@ fn make_random_polynomial_at<E: PairingEngine>(
     debug_assert!(d_i.len() == threshold);
 
     d_i
+}
+
+pub fn make_random_ark_polynomial_at<E: PairingEngine>(
+    threshold: usize,
+    root: &E::Fr,
+    rng: &mut impl RngCore,
+) -> Vec<E::Fr> {
+    let mut threshold_poly = DensePolynomial::<E::Fr>::rand(threshold - 1, rng);
+    threshold_poly[0] = E::Fr::zero();
+    let d_i_0 = E::Fr::zero() - threshold_poly.evaluate(root);
+    threshold_poly[0] = d_i_0;
+    assert_eq!(threshold_poly.evaluate(root), E::Fr::zero());
+    assert_eq!(threshold_poly.coeffs.len(), threshold);
+    threshold_poly.coeffs
 }
 
 fn prepare_share_updates_for_refreshing<E: PairingEngine>(

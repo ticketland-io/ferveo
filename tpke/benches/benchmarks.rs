@@ -1,5 +1,10 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use ark_std::Zero;
+use criterion::{
+    black_box, criterion_group, criterion_main, BenchmarkId, Criterion,
+};
 use group_threshold_cryptography::*;
+
+type Fr = <ark_bls12_381::Bls12_381 as ark_ec::PairingEngine>::Fr;
 
 pub fn bench_decryption(c: &mut Criterion) {
     use rand::SeedableRng;
@@ -143,5 +148,50 @@ pub fn bench_decryption(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, bench_decryption);
+pub fn bench_random_poly(c: &mut Criterion) {
+    use rand::SeedableRng;
+    let mut group = c.benchmark_group("RandomPoly");
+    type E = ark_bls12_381::Bls12_381;
+    group.sample_size(10);
+
+    for threshold in [20, 40, 60, 80, 100] {
+        let rng = &mut rand::rngs::StdRng::seed_from_u64(0);
+        let mut ark = {
+            let mut rng = rng.clone();
+            move || {
+                black_box(make_random_ark_polynomial_at::<E>(
+                    threshold,
+                    &Fr::zero(),
+                    &mut rng,
+                ))
+            }
+        };
+        let mut vec = {
+            let mut rng = rng.clone();
+            move || {
+                black_box(make_random_polynomial_at::<E>(
+                    threshold,
+                    &Fr::zero(),
+                    &mut rng,
+                ))
+            }
+        };
+        group.bench_function(
+            BenchmarkId::new("random_polynomial_ark", threshold),
+            |b| {
+                #[allow(clippy::redundant_closure)]
+                b.iter(|| ark())
+            },
+        );
+        group.bench_function(
+            BenchmarkId::new("random_polynomial_vec", threshold),
+            |b| {
+                #[allow(clippy::redundant_closure)]
+                b.iter(|| vec())
+            },
+        );
+    }
+}
+
+criterion_group!(benches, bench_decryption, bench_random_poly);
 criterion_main!(benches);
