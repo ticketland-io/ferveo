@@ -472,10 +472,10 @@ mod tests {
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, _, contexts) =
-            setup::<E>(threshold, shares_num, &mut rng);
+            setup_fast::<E>(threshold, shares_num, &mut rng);
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
-        let mut shares: Vec<DecryptionShare<E>> = vec![];
+        let mut shares: Vec<DecryptionShareFast<E>> = vec![];
         for context in contexts.iter() {
             shares.push(context.create_share(&ciphertext));
         }
@@ -485,10 +485,12 @@ mod tests {
                 .blinded_key_shares
                 .verify_blinding(&pub_context.public_key_shares, rng));
         }*/
-        let prepared_blinded_key_shares =
-            prepare_combine(&contexts[0].public_decryption_contexts, &shares);
+        let prepared_blinded_key_shares = prepare_combine_fast(
+            &contexts[0].public_decryption_contexts,
+            &shares,
+        );
         let shared_secret =
-            share_combine(&shares, &prepared_blinded_key_shares);
+            share_combine_fast(&shares, &prepared_blinded_key_shares);
 
         test_ciphertext_validation_fails(msg, aad, &ciphertext, &shared_secret);
     }

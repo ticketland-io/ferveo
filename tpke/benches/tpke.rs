@@ -58,7 +58,7 @@ impl SetupFast {
             share_combine_fast(&decryption_shares, &prepared_key_shares);
 
         let shared_secret =
-            share_combine(&decryption_shares, &prepared_key_shares);
+            share_combine_fast(&decryption_shares, &prepared_key_shares);
 
         let shared = SetupShared {
             threshold,
