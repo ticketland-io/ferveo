@@ -5,5 +5,5 @@ pub mod tpke;
 
 criterion_main!(
     arkworks::benches,
-    // tpke::benches // TODO: Enable before merging
+    tpke::benches,
 );
