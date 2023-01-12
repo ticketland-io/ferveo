@@ -1,10 +1,11 @@
-use ark_bls12_381::{Fr, G1Affine, G2Affine};
+#![allow(clippy::redundant_closure)]
+
 use ark_bls12_381::{Fr, G1Affine, G2Affine};
 use criterion::{black_box, criterion_group, BenchmarkId, Criterion};
 use ark_std::Zero;
 use group_threshold_cryptography::*;
 use rand::prelude::StdRng;
-use rand_core::RngCore;
+use rand_core::{RngCore, SeedableRng};
 
 const SHARES_NUM_CASES: [usize; 5] = [4, 8, 16, 32, 64];
 const MSG_SIZE_CASES: [usize; 7] = [256, 512, 1024, 2048, 4096, 8192, 16384];
@@ -133,10 +134,11 @@ impl SetupSimple {
 }
 
 pub fn bench_create_decryption_share(c: &mut Criterion) {
-    use rand::SeedableRng;
-
     let rng = &mut StdRng::seed_from_u64(0);
+
     let mut group = c.benchmark_group("SHARE CREATE");
+    group.sample_size(10);
+
     let msg_size = MSG_SIZE_CASES[0];
 
     for shares_num in SHARES_NUM_CASES {
@@ -169,29 +171,22 @@ pub fn bench_create_decryption_share(c: &mut Criterion) {
             }
         };
 
-        group.sample_size(10);
         group.bench_function(
             BenchmarkId::new("share_create_fast", shares_num),
-            |b| {
-                #[allow(clippy::redundant_closure)]
-                b.iter(|| fast())
-            },
+            |b| b.iter(|| fast()),
         );
         group.bench_function(
             BenchmarkId::new("share_create_simple", shares_num),
-            |b| {
-                #[allow(clippy::redundant_closure)]
-                b.iter(|| simple())
-            },
+            |b| b.iter(|| simple()),
         );
     }
 }
 
 pub fn bench_share_prepare(c: &mut Criterion) {
-    use rand::SeedableRng;
-
     let rng = &mut StdRng::seed_from_u64(0);
+
     let mut group = c.benchmark_group("SHARE PREPARE");
+    group.sample_size(10);
     let msg_size = MSG_SIZE_CASES[0];
 
     for shares_num in SHARES_NUM_CASES {
@@ -209,29 +204,23 @@ pub fn bench_share_prepare(c: &mut Criterion) {
             move || black_box(prepare_combine_simple(&setup.pub_contexts))
         };
 
-        group.sample_size(10);
         group.bench_function(
             BenchmarkId::new("share_prepare_fast", shares_num),
-            |b| {
-                #[allow(clippy::redundant_closure)]
-                b.iter(|| fast())
-            },
+            |b| b.iter(|| fast()),
         );
         group.bench_function(
             BenchmarkId::new("share_prepare_simple", shares_num),
-            |b| {
-                #[allow(clippy::redundant_closure)]
-                b.iter(|| simple())
-            },
+            |b| b.iter(|| simple()),
         );
     }
 }
 
 pub fn bench_share_combine(c: &mut Criterion) {
-    use rand::SeedableRng;
-
     let rng = &mut StdRng::seed_from_u64(0);
+
     let mut group = c.benchmark_group("SHARE COMBINE");
+    group.sample_size(10);
+
     let msg_size = MSG_SIZE_CASES[0];
 
     for shares_num in SHARES_NUM_CASES {
@@ -262,26 +251,20 @@ pub fn bench_share_combine(c: &mut Criterion) {
         let a = share_combine_bench(num_shares);
         group.bench_function(
             BenchmarkId::new("share_combine_fast", shares_num),
-            |b| {
-                #[allow(clippy::redundant_closure)]
-                b.iter(|| fast())
-            },
+            |b| b.iter(|| fast()),
         );
         group.bench_function(
             BenchmarkId::new("share_combine_simple", shares_num),
-            |b| {
-                #[allow(clippy::redundant_closure)]
-                b.iter(|| simple())
-            },
+            |b| b.iter(|| simple()),
         );
     }
 }
 
 pub fn bench_share_encrypt_decrypt(c: &mut Criterion) {
-    use rand::SeedableRng;
+    let mut group = c.benchmark_group("ENCRYPT DECRYPT");
+    group.sample_size(10);
 
     let rng = &mut StdRng::seed_from_u64(0);
-    let mut group = c.benchmark_group("ENCRYPT DECRYPT");
     let shares_num = SHARES_NUM_CASES[0];
 
     for msg_size in MSG_SIZE_CASES {
@@ -311,13 +294,10 @@ pub fn bench_share_encrypt_decrypt(c: &mut Criterion) {
             }
         };
 
-        group.sample_size(10);
         group.bench_function(BenchmarkId::new("encrypt", msg_size), |b| {
-            #[allow(clippy::redundant_closure)]
             b.iter(|| encrypt())
         });
         group.bench_function(BenchmarkId::new("decrypt", msg_size), |b| {
-            #[allow(clippy::redundant_closure)]
             b.iter(|| decrypt())
         });
     }
