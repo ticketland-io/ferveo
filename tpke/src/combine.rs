@@ -49,14 +49,14 @@ pub fn prepare_combine_simple<E: PairingEngine>(
     let shares_x: Vec<_> = pub_contexts.iter().map(|c| c.domain).collect();
     // See https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
     // In this formula x_i = 0, hence numerator is x_m
-    lagrange_basis_at::<E>(&shares_x, E::Fr::zero())
+    lagrange_basis_at::<E>(&shares_x, &E::Fr::zero())
 }
 
 /// Calculate lagrange coefficients using optimized formula
 /// See https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
-fn lagrange_basis_at<E: PairingEngine>(
+pub fn lagrange_basis_at<E: PairingEngine>(
     shares_x: &[E::Fr],
-    x_i: E::Fr,
+    x_i: &E::Fr,
 ) -> Vec<<E>::Fr> {
     let mut lagrange_coeffs = vec![];
     for x_j in shares_x {

@@ -1,10 +1,10 @@
 #![allow(clippy::redundant_closure)]
 
 use ark_bls12_381::{Fr, G1Affine, G2Affine};
+use ark_std::Zero;
 use criterion::{
     black_box, criterion_group, criterion_main, BenchmarkId, Criterion,
 };
-use ark_std::Zero;
 use group_threshold_cryptography::*;
 use rand::prelude::StdRng;
 use rand_core::{RngCore, SeedableRng};
@@ -306,7 +306,6 @@ pub fn bench_share_encrypt_decrypt(c: &mut Criterion) {
 }
 
 pub fn bench_random_poly(c: &mut Criterion) {
-    use rand::SeedableRng;
     let mut group = c.benchmark_group("RandomPoly");
     group.sample_size(10);
 

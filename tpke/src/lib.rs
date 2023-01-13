@@ -465,7 +465,7 @@ mod tests {
 
     #[test]
     fn fast_threshold_encryption() {
-        let rng = &mut test_rng();
+        let mut rng = &mut test_rng();
         let shares_num = 16;
         let threshold = shares_num * 2 / 3;
         let msg: &[u8] = "abc".as_bytes();
@@ -514,7 +514,9 @@ mod tests {
             .iter()
             .map(|c| c.create_share(&ciphertext))
             .collect();
-        let lagrange = prepare_combine_simple::<E>(&contexts[0].public_decryption_contexts);
+        let lagrange = prepare_combine_simple::<E>(
+            &contexts[0].public_decryption_contexts,
+        );
 
         let shared_secret =
             share_combine_simple::<E>(&decryption_shares, &lagrange);
