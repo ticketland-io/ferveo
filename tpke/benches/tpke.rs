@@ -9,7 +9,7 @@ use group_threshold_cryptography::*;
 use rand::prelude::StdRng;
 use rand_core::{RngCore, SeedableRng};
 
-const SHARES_NUM_CASES: [usize; 5] = [4, 8, 16, 32, 64];
+const NUM_SHARES_CASES: [usize; 5] = [4, 8, 16, 32, 64];
 const MSG_SIZE_CASES: [usize; 7] = [256, 512, 1024, 2048, 4096, 8192, 16384];
 
 type E = ark_bls12_381::Bls12_381;
@@ -56,7 +56,7 @@ impl SetupFast {
         let prepared_key_shares =
             prepare_combine_fast(&pub_contexts, &decryption_shares);
 
-        let shared_secret =
+        let _shared_secret =
             share_combine_fast(&decryption_shares, &prepared_key_shares);
 
         let shared_secret =
@@ -143,7 +143,7 @@ pub fn bench_create_decryption_share(c: &mut Criterion) {
 
     let msg_size = MSG_SIZE_CASES[0];
 
-    for shares_num in SHARES_NUM_CASES {
+    for shares_num in NUM_SHARES_CASES {
         let fast = {
             let setup = SetupFast::new(shares_num, msg_size, rng);
             move || {
@@ -191,7 +191,7 @@ pub fn bench_share_prepare(c: &mut Criterion) {
     group.sample_size(10);
     let msg_size = MSG_SIZE_CASES[0];
 
-    for shares_num in SHARES_NUM_CASES {
+    for shares_num in NUM_SHARES_CASES {
         let fast = {
             let setup = SetupFast::new(shares_num, msg_size, rng);
             move || {
@@ -225,7 +225,7 @@ pub fn bench_share_combine(c: &mut Criterion) {
 
     let msg_size = MSG_SIZE_CASES[0];
 
-    for shares_num in SHARES_NUM_CASES {
+    for shares_num in NUM_SHARES_CASES {
         let fast = {
             let setup = SetupFast::new(shares_num, msg_size, rng);
             move || {
@@ -245,12 +245,6 @@ pub fn bench_share_combine(c: &mut Criterion) {
             }
         };
 
-    let mut group = c.benchmark_group("TPKE_SIMPLE");
-    group.sample_size(10);
-    group.measurement_time(core::time::Duration::new(30, 0));
-
-    for num_shares in NUM_SHARES_CASES {
-        let a = share_combine_bench(num_shares);
         group.bench_function(
             BenchmarkId::new("share_combine_fast", shares_num),
             |b| b.iter(|| fast()),
@@ -267,7 +261,7 @@ pub fn bench_share_encrypt_decrypt(c: &mut Criterion) {
     group.sample_size(10);
 
     let rng = &mut StdRng::seed_from_u64(0);
-    let shares_num = SHARES_NUM_CASES[0];
+    let shares_num = NUM_SHARES_CASES[0];
 
     for msg_size in MSG_SIZE_CASES {
         let mut encrypt = {
@@ -311,7 +305,6 @@ criterion_group!(
     bench_share_prepare,
     bench_share_combine,
     bench_share_encrypt_decrypt,
-    bench_random_poly
 );
 
 criterion_main!(benches);
