@@ -8,6 +8,9 @@ description = "Threshold signature and encryption using group secret key"
 repository = "https://github.com/heliaxdev/group-threshold-crypto/"
 readme = "README.md"
 
+[lib]
+bench = false
+
 [dependencies]
 hex = "=0.4.3"
 rand_core = "0.6"
@@ -23,7 +26,7 @@ ark-poly = "0.3"
 ark-serialize = "0.3"
 ark-std = "0.3"
 ark-bls12-381 = "0.3"
-itertools="0.10"
+itertools = "0.10"
 subproductdomain = { path = "../subproductdomain" }
 chacha20poly1305 = "0.10.1"
 serde = { version = "1.0", features = ["derive"] }
@@ -31,7 +34,7 @@ serde_with = "2.0.1"
 bincode = "1.3.3"
 
 [dev-dependencies]
-criterion = { version = "0.4", default-features = false }
+criterion = { version = "0.4", features = ["html_reports"] }
 
 [[bench]]
 name = "benchmarks"
