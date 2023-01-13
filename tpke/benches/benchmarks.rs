@@ -1,8 +1,8 @@
 use ark_bls12_381::{Fr, G1Affine, G2Affine};
+use ark_std::Zero;
 use criterion::{
     black_box, criterion_group, criterion_main, BenchmarkId, Criterion,
 };
-use ark_std::Zero;
 use group_threshold_cryptography::*;
 use rand::prelude::StdRng;
 use rand_core::RngCore;
@@ -10,7 +10,6 @@ use rand_core::RngCore;
 const SHARES_NUM_CASES: [usize; 5] = [4, 8, 16, 32, 64];
 const MSG_SIZE_CASES: [usize; 7] = [256, 512, 1024, 2048, 4096, 8192, 16384];
 
-type Fr = <ark_bls12_381::Bls12_381 as ark_ec::PairingEngine>::Fr;
 type E = ark_bls12_381::Bls12_381;
 type G2Prepared = ark_ec::bls12::G2Prepared<ark_bls12_381::Parameters>;
 type Fqk = <ark_bls12_381::Bls12_381 as ark_ec::PairingEngine>::Fqk;
@@ -29,9 +28,9 @@ struct SetupShared {
 
 struct SetupFast {
     shared: SetupShared,
-    contexts: Vec<PrivateDecryptionContext<E>>,
-    pub_contexts: Vec<PublicDecryptionContext<E>>,
-    decryption_shares: Vec<DecryptionShare<E>>,
+    contexts: Vec<PrivateDecryptionContextFast<E>>,
+    pub_contexts: Vec<PublicDecryptionContextFast<E>>,
+    decryption_shares: Vec<DecryptionShareFast<E>>,
     prepared_key_shares: Vec<G2Prepared>,
 }
 
@@ -43,20 +42,20 @@ impl SetupFast {
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, privkey, contexts) =
-            setup::<E>(threshold, shares_num, rng);
+            setup_fast::<E>(threshold, shares_num, rng);
         let ciphertext = encrypt::<_, E>(&msg, aad, &pubkey, rng);
 
-        let mut decryption_shares: Vec<DecryptionShare<E>> = vec![];
+        let mut decryption_shares: Vec<DecryptionShareFast<E>> = vec![];
         for context in contexts.iter() {
             decryption_shares.push(context.create_share(&ciphertext));
         }
 
         let pub_contexts = contexts[0].clone().public_decryption_contexts;
         let prepared_key_shares =
-            prepare_combine(&pub_contexts, &decryption_shares);
+            prepare_combine_fast(&pub_contexts, &decryption_shares);
 
         let shared_secret =
-            share_combine(&decryption_shares, &prepared_key_shares);
+            share_combine_fast(&decryption_shares, &prepared_key_shares);
 
         let shared = SetupShared {
             threshold,
@@ -197,7 +196,7 @@ pub fn bench_share_prepare(c: &mut Criterion) {
         let fast = {
             let setup = SetupFast::new(shares_num, msg_size, rng);
             move || {
-                black_box(prepare_combine(
+                black_box(prepare_combine_fast(
                     &setup.pub_contexts,
                     &setup.decryption_shares,
                 ))
@@ -237,7 +236,7 @@ pub fn bench_share_combine(c: &mut Criterion) {
         let fast = {
             let setup = SetupFast::new(shares_num, msg_size, rng);
             move || {
-                black_box(share_combine(
+                black_box(share_combine_fast(
                     &setup.decryption_shares,
                     &setup.prepared_key_shares,
                 ));
@@ -317,14 +316,13 @@ pub fn bench_share_encrypt_decrypt(c: &mut Criterion) {
     }
 }
 
-
 pub fn bench_random_poly(c: &mut Criterion) {
     use rand::SeedableRng;
     let mut group = c.benchmark_group("RandomPoly");
     group.sample_size(10);
 
     for threshold in [1, 2, 4, 8, 16, 32, 64] {
-        let rng = &mut rand::rngs::StdRng::seed_from_u64(0);
+        let rng = &mut StdRng::seed_from_u64(0);
         let mut ark = {
             let mut rng = rng.clone();
             move || {
@@ -367,8 +365,7 @@ criterion_group!(
     bench_create_decryption_share,
     bench_share_prepare,
     bench_share_combine,
-    bench_share_encrypt_decrypt
-    bench_share_combine
+    bench_share_encrypt_decrypt,
     bench_random_poly
 );
 criterion_main!(benches);
