@@ -1,0 +1,171 @@
+use crate::{lagrange_basis_at, PrivateDecryptionContextSimple};
+use ark_ec::{PairingEngine, ProjectiveCurve};
+use ark_ff::{PrimeField, Zero};
+use ark_poly::{univariate::DensePolynomial, Polynomial, UVPolynomial};
+use ark_std::UniformRand;
+use itertools::zip_eq;
+use rand::prelude::StdRng;
+use rand_core::RngCore;
+use std::collections::HashMap;
+use std::usize;
+
+pub fn recover_share_at_point<E: PairingEngine>(
+    other_participants: &[PrivateDecryptionContextSimple<E>],
+    threshold: usize,
+    x_r: &E::Fr,
+    rng: &mut StdRng,
+) -> E::G2Projective {
+    let share_updates = prepare_share_updates_for_recovery::<E>(
+        other_participants,
+        x_r,
+        threshold,
+        rng,
+    );
+
+    let new_shares_y =
+        update_shares_for_recovery::<E>(other_participants, &share_updates);
+
+    // From the PSS paper, section 4.2.4, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
+    // Interpolate new shares to recover y_r
+    let shares_x = &other_participants[0]
+        .public_decryption_contexts
+        .iter()
+        .map(|ctxt| ctxt.domain)
+        .collect::<Vec<_>>();
+
+    // Recover y_r
+    let lagrange = lagrange_basis_at::<E>(shares_x, x_r);
+    let prods =
+        zip_eq(new_shares_y, lagrange).map(|(y_j, l)| y_j.mul(l.into_repr()));
+    prods.fold(E::G2Projective::zero(), |acc, y_j| acc + y_j)
+}
+
+/// From PSS paper, section 4.2.1, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
+fn prepare_share_updates_for_recovery<E: PairingEngine>(
+    participants: &[PrivateDecryptionContextSimple<E>],
+    x_r: &E::Fr,
+    threshold: usize,
+    rng: &mut impl RngCore,
+) -> HashMap<usize, HashMap<usize, E::G2Projective>> {
+    // TODO: Refactor this function so that each participant performs it individually
+    // Each participant prepares an update for each other participant
+    participants
+        .iter()
+        .map(|p1| {
+            let i = p1.index;
+            // Generate a new random polynomial with constant term x_r
+            let d_i = make_random_polynomial_at::<E>(threshold, x_r, rng);
+
+            // Now, we need to evaluate the polynomial at each of participants' indices
+            let deltas_i: HashMap<_, _> =
+                compute_polynomial_deltas::<E>(participants, &d_i);
+            (i, deltas_i)
+        })
+        .collect::<HashMap<_, _>>()
+}
+
+/// From PSS paper, section 4.2.3, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
+fn update_shares_for_recovery<E: PairingEngine>(
+    participants: &[PrivateDecryptionContextSimple<E>],
+    deltas: &HashMap<usize, HashMap<usize, E::G2Projective>>,
+) -> Vec<E::G2Projective> {
+    // TODO: Refactor this function so that each participant performs it individually
+    participants
+        .iter()
+        .map(|p| {
+            let i = p.index;
+            let mut new_y = E::G2Projective::from(
+                p.private_key_share.private_key_shares[0], // y_i
+            );
+            for j in deltas.keys() {
+                new_y += deltas[j][&i];
+            }
+            new_y
+        })
+        .collect()
+}
+
+pub fn make_random_polynomial_at<E: PairingEngine>(
+    threshold: usize,
+    root: &E::Fr,
+    rng: &mut impl RngCore,
+) -> DensePolynomial<E::Fr> {
+    // [][threshold-1]
+    let mut d_i = (0..threshold - 1)
+        .map(|_| E::Fr::rand(rng))
+        .collect::<Vec<_>>();
+    // [0..][threshold]
+    d_i.insert(0, E::Fr::zero());
+    let mut d_i = DensePolynomial::from_coefficients_vec(d_i);
+
+    // Now, we calculate d_i_0
+    // This is the term that will "zero out" the polynomial at x_r, d_i(x_r) = 0
+    let d_i_0 = E::Fr::zero() - d_i.evaluate(root);
+    d_i[0] = d_i_0;
+
+    debug_assert!(d_i.evaluate(root) == E::Fr::zero());
+    debug_assert!(d_i.len() == threshold);
+
+    d_i
+}
+
+pub fn make_random_ark_polynomial_at<E: PairingEngine>(
+    threshold: usize,
+    root: &E::Fr,
+    rng: &mut impl RngCore,
+) -> Vec<E::Fr> {
+    let mut threshold_poly = DensePolynomial::<E::Fr>::rand(threshold - 1, rng);
+    threshold_poly[0] = E::Fr::zero();
+    let d_i_0 = E::Fr::zero() - threshold_poly.evaluate(root);
+    threshold_poly[0] = d_i_0;
+    debug_assert!(threshold_poly.evaluate(root) == E::Fr::zero());
+    debug_assert!(threshold_poly.coeffs.len() == threshold);
+    threshold_poly.coeffs
+}
+
+fn prepare_share_updates_for_refreshing<E: PairingEngine>(
+    participants: &[PrivateDecryptionContextSimple<E>],
+    threshold: usize,
+    rng: &mut impl RngCore,
+) -> HashMap<usize, E::G2Projective> {
+    let polynomial =
+        make_random_polynomial_at::<E>(threshold, &E::Fr::zero(), rng);
+    compute_polynomial_deltas(participants, &polynomial)
+}
+
+fn compute_polynomial_deltas<E: PairingEngine>(
+    participants: &[PrivateDecryptionContextSimple<E>],
+    polynomial: &DensePolynomial<E::Fr>,
+) -> HashMap<usize, E::G2Projective> {
+    let h_g2 = E::G2Projective::from(participants[0].setup_params.h);
+    participants
+        .iter()
+        .map(|p| {
+            let i = p.index;
+            let x_i = p.public_decryption_contexts[i].domain;
+            let eval = polynomial.evaluate(&x_i);
+            let eval_g2 = h_g2.mul(eval.into_repr());
+            (i, eval_g2)
+        })
+        .collect::<HashMap<_, _>>()
+}
+
+pub fn refresh_shares<E: PairingEngine>(
+    participants: &[PrivateDecryptionContextSimple<E>],
+    threshold: usize,
+    rng: &mut impl RngCore,
+) -> Vec<E::G2Projective> {
+    let share_updates =
+        prepare_share_updates_for_refreshing::<E>(participants, threshold, rng);
+    participants
+        .iter()
+        .map(|p| {
+            let i = p.index;
+            let mut new_y = E::G2Projective::from(
+                p.private_key_share.private_key_shares[0], // y_i
+            );
+            new_y += share_updates[&i];
+            new_y
+        })
+        .collect()
+}

@@ -3,7 +3,6 @@
 
 use crate::*;
 use ark_ec::ProjectiveCurve;
-use itertools::zip_eq;
 
 pub fn prepare_combine_fast<E: PairingEngine>(
     public_decryption_contexts: &[PublicDecryptionContextFast<E>],
@@ -52,26 +51,28 @@ pub fn prepare_combine_simple<E: PairingEngine>(
         .map(|ctxt| ctxt.domain)
         .collect::<Vec<_>>();
 
+    // Calculate lagrange coefficients using optimized formula, see https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
     // In this formula x_i = 0, hence numerator is x_m
-    lagrange_coeffs_at::<E>(&shares_x, &E::Fr::zero())
+    lagrange_basis_at::<E>(&shares_x, &E::Fr::zero())
 }
 
-fn lagrange_coeffs_at<E: PairingEngine>(
-    shares_x: &Vec<E::Fr>,
+/// Calculates Lagrange coefficients for a given x_i
+pub fn lagrange_basis_at<E: PairingEngine>(
+    shares_x: &[E::Fr],
     x_i: &E::Fr,
 ) -> Vec<E::Fr> {
-    // Calculate lagrange coefficients using optimized formula, see https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
-    let mut lagrange_coeffs = vec![];
-    for x_j in shares_x {
-        let mut prod = E::Fr::one();
-        for x_m in shares_x {
-            if x_j != x_m {
-                prod *= (*x_m - x_i) / (*x_m - *x_j);
-            }
-        }
-        lagrange_coeffs.push(prod);
-    }
-    lagrange_coeffs
+    shares_x
+        .iter()
+        .map(|x_j| {
+            let mut prod = E::Fr::one();
+            shares_x.iter().for_each(|x_m| {
+                if x_j != x_m {
+                    prod *= (*x_m - x_i) / (*x_m - *x_j);
+                }
+            });
+            prod
+        })
+        .collect()
 }
 
 pub fn share_combine_fast<E: PairingEngine>(
@@ -101,7 +102,7 @@ pub fn share_combine_simple<E: PairingEngine>(
     let mut product_of_shares = E::Fqk::one();
 
     // Sum of C_i^{L_i}z
-    for (c_i, alpha_i) in zip_eq(shares.iter(), lagrange_coeffs.iter()) {
+    for (c_i, alpha_i) in izip!(shares, lagrange_coeffs) {
         // Exponentiation by alpha_i
         let ss = c_i.pow(alpha_i.into_repr());
         product_of_shares *= ss;

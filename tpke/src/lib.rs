@@ -2,12 +2,16 @@
 #![allow(dead_code)]
 
 use crate::hash_to_curve::htp_bls12381_g2;
+use crate::SetupParams;
+
 use ark_ec::{msm::FixedBaseMSM, AffineCurve, PairingEngine};
 use ark_ff::{Field, One, PrimeField, ToBytes, UniformRand, Zero};
-use ark_poly::{univariate::DensePolynomial, UVPolynomial};
-use ark_poly::{EvaluationDomain, Polynomial};
+use ark_poly::{
+    univariate::DensePolynomial, EvaluationDomain, Polynomial, UVPolynomial,
+};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::izip;
+
 use subproductdomain::SubproductDomain;
 
 use rand_core::RngCore;
@@ -15,26 +19,19 @@ use std::usize;
 use thiserror::Error;
 
 mod ciphertext;
+mod combine;
+mod context;
+mod decryption;
 mod hash_to_curve;
+mod key_share;
+mod refresh;
 
 pub use ciphertext::*;
-
-mod key_share;
-
-pub use key_share::*;
-
-mod decryption;
-
-pub use decryption::*;
-
-mod combine;
-
 pub use combine::*;
-
-mod context;
-
-use crate::SetupParams;
 pub use context::*;
+pub use decryption::*;
+pub use key_share::*;
+pub use refresh::*;
 
 // TODO: Turn into a crate features
 pub mod api;
@@ -180,6 +177,7 @@ pub fn setup_fast<E: PairingEngine>(
                 g,
                 g_inv: E::G1Prepared::from(-g),
                 h_inv: E::G2Prepared::from(-h),
+                h,
             },
             private_key_share,
             public_decryption_contexts: vec![],
@@ -275,6 +273,7 @@ pub fn setup_simple<E: PairingEngine>(
                 g,
                 g_inv: E::G1Prepared::from(-g),
                 h_inv: E::G2Prepared::from(-h),
+                h,
             },
             private_key_share,
             public_decryption_contexts: vec![],
@@ -291,6 +290,11 @@ pub fn setup_simple<E: PairingEngine>(
         private.public_decryption_contexts = public_contexts.clone();
     }
 
+    // TODO: Should we also be returning some sort of signed transcript?
+    // "Post the signed message \(\tau, (F_0, \ldots, F_t), \hat{u}2, (\hat{Y}{i,\omega_j})\) to the blockchain"
+    // \tau - unique session identifier
+    // See: https://nikkolasg.github.io/ferveo/pvss.html#dealers-role
+
     (pubkey.into(), privkey.into(), private_contexts)
 }
 
@@ -301,27 +305,38 @@ pub fn generate_random<R: RngCore, E: PairingEngine>(
     (0..n).map(|_| E::Fr::rand(rng)).collect::<Vec<_>>()
 }
 
+fn make_decryption_share<E: PairingEngine>(
+    private_share: &PrivateKeyShare<E>,
+    ciphertext: &Ciphertext<E>,
+) -> E::Fqk {
+    let z_i = private_share;
+    let u = ciphertext.commitment;
+    let z_i = z_i.private_key_shares[0];
+    E::pairing(u, z_i)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::*;
+    use ark_bls12_381::Fr;
+    use ark_ec::ProjectiveCurve;
     use ark_std::test_rng;
+    use rand::prelude::StdRng;
+    use std::panic;
 
     type E = ark_bls12_381::Bls12_381;
 
     #[test]
     fn ciphertext_serialization() {
-        let mut rng = test_rng();
-        let threshold = 3;
-        let shares_num = 8;
+        let rng = &mut test_rng();
+        let shares_num = 16;
+        let threshold = shares_num * 2 / 3;
         let msg: &[u8] = "abc".as_bytes();
-        let aad: &[u8] = "aad".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
 
-        let (pubkey, _privkey, _) =
-            setup_fast::<E>(threshold, shares_num, &mut rng);
+        let (pubkey, _, _) = setup_fast::<E>(threshold, shares_num, rng);
 
-        let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
-            msg, aad, &pubkey, &mut rng,
-        );
+        let ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
 
         let serialized = ciphertext.to_bytes();
         let deserialized: Ciphertext<E> = Ciphertext::from_bytes(&serialized);
@@ -345,47 +360,29 @@ mod tests {
 
     #[test]
     fn symmetric_encryption() {
-        let mut rng = test_rng();
-        let threshold = 3;
-        let shares_num = 8;
+        let rng = &mut test_rng();
+        let shares_num = 16;
+        let threshold = shares_num * 2 / 3;
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
-        let (pubkey, privkey, _) =
-            setup_fast::<E>(threshold, shares_num, &mut rng);
+        let (pubkey, privkey, _) = setup_fast::<E>(threshold, shares_num, rng);
 
-        let ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
-            msg, aad, &pubkey, &mut rng,
-        );
+        let ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
         let plaintext = checked_decrypt(&ciphertext, aad, privkey);
 
         assert_eq!(msg, plaintext)
     }
 
-    // Source: https://stackoverflow.com/questions/26469715/how-do-i-write-a-rust-unit-test-that-ensures-that-a-panic-has-occurred
-    // TODO: Remove after adding proper error handling to the library
-    use std::panic;
-
-    fn catch_unwind_silent<F: FnOnce() -> R + panic::UnwindSafe, R>(
-        f: F,
-    ) -> std::thread::Result<R> {
-        let prev_hook = panic::take_hook();
-        panic::set_hook(Box::new(|_| {}));
-        let result = panic::catch_unwind(f);
-        panic::set_hook(prev_hook);
-        result
-    }
-
     #[test]
     fn threshold_encryption() {
-        let mut rng = &mut test_rng();
-        let threshold = 16 * 2 / 3;
+        let rng = &mut test_rng();
         let shares_num = 16;
+        let threshold = shares_num * 2 / 3;
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
-        let (pubkey, _privkey, contexts) =
-            setup_fast::<E>(threshold, shares_num, &mut rng);
+        let (pubkey, _, contexts) = setup_fast::<E>(threshold, shares_num, rng);
         let mut ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
         let mut shares: Vec<DecryptionShareFast<E>> = vec![];
@@ -415,14 +412,14 @@ mod tests {
 
         // Malformed the ciphertext
         ciphertext.ciphertext[0] += 1;
-        let result = std::panic::catch_unwind(|| {
+        let result = panic::catch_unwind(|| {
             checked_decrypt_with_shared_secret(&ciphertext, aad, &shared_secret)
         });
         assert!(result.is_err());
 
         // Malformed the AAD
         let aad = "bad aad".as_bytes();
-        let result = std::panic::catch_unwind(|| {
+        let result = panic::catch_unwind(|| {
             checked_decrypt_with_shared_secret(&ciphertext, aad, &shared_secret)
         });
         assert!(result.is_err());
@@ -430,17 +427,14 @@ mod tests {
 
     #[test]
     fn ciphertext_validity_check() {
-        let mut rng = test_rng();
-        let threshold = 3;
-        let shares_num = 8;
+        let rng = &mut test_rng();
+        let shares_num = 16;
+        let threshold = shares_num * 2 / 3;
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
-        let (pubkey, _privkey, _) =
-            setup_fast::<E>(threshold, shares_num, &mut rng);
-        let mut ciphertext = encrypt::<ark_std::rand::rngs::StdRng, E>(
-            msg, aad, &pubkey, &mut rng,
-        );
+        let (pubkey, _, _) = setup_fast::<E>(threshold, shares_num, rng);
+        let mut ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
 
         // So far, the ciphertext is valid
         assert!(check_ciphertext_validity(&ciphertext, aad));
@@ -456,38 +450,26 @@ mod tests {
 
     #[test]
     fn simple_threshold_decryption() {
-        let mut rng = &mut test_rng();
-        let threshold = 16 * 2 / 3;
+        let rng = &mut test_rng();
         let shares_num = 16;
+        let threshold = shares_num * 2 / 3;
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
-        // To be updated
-        let (pubkey, _privkey, private_decryption_contexts) =
-            setup_simple::<E>(threshold, shares_num, &mut rng);
+        let (pubkey, _, contexts) =
+            setup_simple::<E>(threshold, shares_num, rng);
 
-        // Stays the same
         // Ciphertext.commitment is already computed to match U
         let mut ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
-        // Creating decryption shares
-        let decryption_shares = private_decryption_contexts
+        // Create decryption shares
+        let decryption_shares: Vec<_> = contexts
             .iter()
-            .map(|context| {
-                let u = ciphertext.commitment;
-                let z_i = context.private_key_share.clone();
-                // Simplifying to just one key share per node
-                assert_eq!(z_i.private_key_shares.len(), 1);
-                let z_i = z_i.private_key_shares[0];
-                // Really want to call E::pairing here to avoid heavy computations on client side
-                // C_i = e(U, Z_i)
-                // TODO: Check whether blinded key share fits here
-                E::pairing(u, z_i)
+            .map(|ctxt| {
+                make_decryption_share(&ctxt.private_key_share, &ciphertext)
             })
-            .collect::<Vec<_>>();
-
-        let pub_contexts =
-            &private_decryption_contexts[0].public_decryption_contexts;
+            .collect();
+        let pub_contexts = &contexts[0].public_decryption_contexts;
         let lagrange = prepare_combine_simple::<E>(pub_contexts);
 
         let shared_secret =
@@ -503,16 +485,179 @@ mod tests {
 
         // Malformed the ciphertext
         ciphertext.ciphertext[0] += 1;
-        let result = std::panic::catch_unwind(|| {
+        let result = panic::catch_unwind(|| {
             checked_decrypt_with_shared_secret(&ciphertext, aad, &shared_secret)
         });
         assert!(result.is_err());
 
         // Malformed the AAD
         let aad = "bad aad".as_bytes();
-        let result = std::panic::catch_unwind(|| {
+        let result = panic::catch_unwind(|| {
             checked_decrypt_with_shared_secret(&ciphertext, aad, &shared_secret)
         });
         assert!(result.is_err());
+    }
+
+    #[test]
+    /// Ñ parties (where t <= Ñ <= N) jointly execute a "share recovery" algorithm, and the output is 1 new share.
+    /// The new share is intended to restore a previously existing share, e.g., due to loss or corruption.
+    fn simple_threshold_decryption_with_share_recovery_at_selected_point() {
+        let rng = &mut test_rng();
+        let shares_num = 16;
+        let threshold = shares_num * 2 / 3;
+
+        let (_, _, mut contexts) =
+            setup_simple::<E>(threshold, shares_num, rng);
+
+        // Prepare participants
+
+        // First, save the soon-to-be-removed participant
+        let selected_participant = contexts.pop().unwrap();
+        let x_r = selected_participant
+            .public_decryption_contexts
+            .last()
+            .unwrap()
+            .domain;
+        let original_y_r =
+            selected_participant.private_key_share.private_key_shares[0];
+
+        // Now, we have to remove the participant from the contexts and all nested structures
+        let mut remaining_participants = contexts;
+        for p in &mut remaining_participants {
+            p.public_decryption_contexts.pop();
+        }
+
+        // Recover the share
+        let y_r = recover_share_at_point(
+            &remaining_participants,
+            threshold,
+            &x_r,
+            rng,
+        );
+        assert_eq!(y_r.into_affine(), original_y_r);
+    }
+
+    fn make_shared_secret_from_contexts<E: PairingEngine>(
+        contexts: &[PrivateDecryptionContextSimple<E>],
+        ciphertext: &Ciphertext<E>,
+    ) -> E::Fqk {
+        let decryption_shares: Vec<_> = contexts
+            .iter()
+            .map(|ctxt| {
+                make_decryption_share(&ctxt.private_key_share, ciphertext)
+            })
+            .collect();
+        make_shared_secret(
+            &contexts[0].public_decryption_contexts,
+            &decryption_shares,
+        )
+    }
+
+    fn make_shared_secret<E: PairingEngine>(
+        pub_contexts: &[PublicDecryptionContextSimple<E>],
+        decryption_shares: &[E::Fqk],
+    ) -> E::Fqk {
+        let lagrange = prepare_combine_simple::<E>(pub_contexts);
+        share_combine_simple::<E>(decryption_shares, &lagrange)
+    }
+
+    #[test]
+    /// Ñ parties (where t <= Ñ <= N) jointly execute a "share recovery" algorithm, and the output is 1 new share.
+    /// The new share is independent from the previously existing shares. We can use this to on-board a new participant into an existing cohort.
+    fn simple_threshold_decryption_with_share_recovery_at_random_point() {
+        let rng = &mut test_rng();
+        let shares_num = 16;
+        let threshold = shares_num * 2 / 3;
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
+
+        let (pubkey, _, contexts) =
+            setup_simple::<E>(threshold, shares_num, rng);
+        let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
+
+        // Create an initial shared secret
+        let old_shared_secret =
+            make_shared_secret_from_contexts(&contexts, &ciphertext);
+
+        // Now, we're going to recover a new share at a random point and check that the shared secret is still the same
+
+        // Remove one participant from the contexts and all nested structures
+        let mut remaining_participants = contexts;
+        remaining_participants.pop().unwrap();
+        for p in &mut remaining_participants {
+            p.public_decryption_contexts.pop().unwrap();
+        }
+
+        // Recover the share
+        let x_r = Fr::rand(rng);
+        let y_r = recover_share_at_point(
+            &remaining_participants,
+            threshold,
+            &x_r,
+            rng,
+        );
+        let recovered_key_share = PrivateKeyShare {
+            private_key_shares: vec![y_r.into_affine()],
+        };
+
+        // Creating decryption shares
+        let mut decryption_shares: Vec<_> = remaining_participants
+            .iter()
+            .map(|ctxt| {
+                make_decryption_share(&ctxt.private_key_share, &ciphertext)
+            })
+            .collect();
+        decryption_shares
+            .push(make_decryption_share(&recovered_key_share, &ciphertext));
+
+        // Creating a shared secret from remaining shares and the recovered one
+        let new_shared_secret = make_shared_secret(
+            &remaining_participants[0].public_decryption_contexts,
+            &decryption_shares,
+        );
+
+        assert_eq!(old_shared_secret, new_shared_secret);
+    }
+
+    /// Ñ parties (where t <= Ñ <= N) jointly execute a "share refresh" algorithm.
+    /// The output is M new shares (with M <= Ñ), with each of the M new shares substituting the
+    /// original share (i.e., the original share is deleted).
+    #[test]
+    fn simple_threshold_decryption_with_share_refreshing() {
+        let rng = &mut test_rng();
+        let shares_num = 16;
+        let threshold = shares_num * 2 / 3;
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
+
+        let (pubkey, _, contexts) =
+            setup_simple::<E>(threshold, shares_num, rng);
+        let pub_contexts = contexts[0].public_decryption_contexts.clone();
+        let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
+
+        // Create an initial shared secret
+        let old_shared_secret =
+            make_shared_secret_from_contexts(&contexts, &ciphertext);
+
+        // Now, we're going to refresh the shares and check that the shared secret is the same
+
+        // Refresh shares
+        let new_shares = refresh_shares::<E>(&contexts, threshold, rng);
+
+        // Creating new decryption shares
+        let new_decryption_shares: Vec<_> = new_shares
+            .iter()
+            .map(|private_share| {
+                let private_share = PrivateKeyShare {
+                    private_key_shares: vec![private_share.into_affine()],
+                };
+                make_decryption_share(&private_share, &ciphertext)
+            })
+            .collect();
+
+        let new_shared_secret =
+            make_shared_secret(&pub_contexts, &new_decryption_shares);
+
+        assert_eq!(old_shared_secret, new_shared_secret);
     }
 }
