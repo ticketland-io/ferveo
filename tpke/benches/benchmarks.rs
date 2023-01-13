@@ -5,6 +5,7 @@ use criterion::{
 use group_threshold_cryptography::*;
 
 type Fr = <ark_bls12_381::Bls12_381 as ark_ec::PairingEngine>::Fr;
+type E = ark_bls12_381::Bls12_381;
 
 pub fn bench_decryption(c: &mut Criterion) {
     use rand::SeedableRng;
@@ -151,10 +152,9 @@ pub fn bench_decryption(c: &mut Criterion) {
 pub fn bench_random_poly(c: &mut Criterion) {
     use rand::SeedableRng;
     let mut group = c.benchmark_group("RandomPoly");
-    type E = ark_bls12_381::Bls12_381;
     group.sample_size(10);
 
-    for threshold in [20, 40, 60, 80, 100] {
+    for threshold in [1, 2, 4, 8, 16, 32, 64] {
         let rng = &mut rand::rngs::StdRng::seed_from_u64(0);
         let mut ark = {
             let mut rng = rng.clone();
