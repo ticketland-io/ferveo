@@ -5,9 +5,12 @@ use ark_bls12_381::{Bls12_381, Fr};
 use ark_ec::{
     prepare_g1, prepare_g2, AffineCurve, PairingEngine, ProjectiveCurve,
 };
-use ark_ff::{BigInteger256, Field, UniformRand};
+use ark_ff::{BigInteger256, Field, UniformRand, Zero};
 use criterion::{
     black_box, criterion_group, criterion_main, BenchmarkId, Criterion,
+};
+use group_threshold_cryptography::{
+    make_random_ark_polynomial_at, make_random_polynomial_at,
 };
 use itertools::izip;
 use rand::prelude::StdRng;
@@ -21,6 +24,8 @@ type G2Projective = ark_ec::bls12::G2Projective<ark_bls12_381::Parameters>;
 type G2Affine = ark_ec::bls12::G2Affine<ark_bls12_381::Parameters>;
 type G2Prepared = <E as PairingEngine>::G2Prepared;
 type Fqk = <E as PairingEngine>::Fqk;
+
+const BENCH_CASES: [usize; 7] = [1, 2, 4, 8, 16, 32, 64];
 
 pub fn bench_mul(c: &mut Criterion) {
     let mut rng = &mut StdRng::seed_from_u64(0);
@@ -127,10 +132,10 @@ pub fn bench_miller_loop(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("miller_loop");
 
-    let cases = vec![1, 2, 4, 8, 16, 32, 64];
-    let pq = make_prepared_pairing_inputs(cases[cases.len() - 1], rng);
+    let pq =
+        make_prepared_pairing_inputs(BENCH_CASES[BENCH_CASES.len() - 1], rng);
 
-    for nr_of_inputs in cases {
+    for nr_of_inputs in BENCH_CASES {
         group.bench_function(
             BenchmarkId::new("BLS12-381 miller_loop", nr_of_inputs),
             |b| b.iter(|| E::miller_loop(pq.iter().take(nr_of_inputs))),
@@ -143,9 +148,9 @@ pub fn bench_final_exponentiation(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("final_exponentiation");
 
-    let cases = vec![1, 2, 4, 8, 16, 32, 64];
-    let pq = make_prepared_pairing_inputs(cases[cases.len() - 1], rng);
-    let ml = cases
+    let pq =
+        make_prepared_pairing_inputs(BENCH_CASES[BENCH_CASES.len() - 1], rng);
+    let ml = BENCH_CASES
         .iter()
         .map(|nr_of_inputs| {
             let pq = pq.iter().take(*nr_of_inputs).collect::<Vec<_>>();
@@ -153,7 +158,7 @@ pub fn bench_final_exponentiation(c: &mut Criterion) {
         })
         .collect::<Vec<_>>();
 
-    for (ml, nr_of_inputs) in izip!(ml, cases) {
+    for (ml, nr_of_inputs) in izip!(ml, BENCH_CASES) {
         group.bench_function(
             BenchmarkId::new("BLS12-381 final_exponentiation", nr_of_inputs),
             |b| b.iter(|| E::final_exponentiation(&ml)),
@@ -179,10 +184,10 @@ pub fn bench_product_of_pairings(c: &mut Criterion) {
     let mut group = c.benchmark_group("product_of_pairings");
     group.sample_size(10);
 
-    let cases = vec![1, 2, 4, 8, 16, 32, 64];
-    let pq = make_prepared_pairing_inputs(cases[cases.len() - 1], rng);
+    let pq =
+        make_prepared_pairing_inputs(BENCH_CASES[BENCH_CASES.len() - 1], rng);
 
-    for nr_of_inputs in cases {
+    for nr_of_inputs in BENCH_CASES {
         group.bench_function(
             BenchmarkId::new("BLS12-381 product_of_pairings", nr_of_inputs),
             |b| {
@@ -191,6 +196,49 @@ pub fn bench_product_of_pairings(c: &mut Criterion) {
                         pq.iter().take(nr_of_inputs),
                     ))
                 })
+            },
+        );
+    }
+}
+
+pub fn bench_random_poly(c: &mut Criterion) {
+    let mut group = c.benchmark_group("RandomPoly");
+    group.sample_size(10);
+
+    for threshold in [1, 2, 4, 8, 16, 32, 64] {
+        let rng = &mut StdRng::seed_from_u64(0);
+        let mut ark = {
+            let mut rng = rng.clone();
+            move || {
+                black_box(make_random_ark_polynomial_at::<E>(
+                    threshold,
+                    &Fr::zero(),
+                    &mut rng,
+                ))
+            }
+        };
+        let mut vec = {
+            let mut rng = rng.clone();
+            move || {
+                black_box(make_random_polynomial_at::<E>(
+                    threshold,
+                    &Fr::zero(),
+                    &mut rng,
+                ))
+            }
+        };
+        group.bench_function(
+            BenchmarkId::new("random_polynomial_ark", threshold),
+            |b| {
+                #[allow(clippy::redundant_closure)]
+                b.iter(|| ark())
+            },
+        );
+        group.bench_function(
+            BenchmarkId::new("random_polynomial_vec", threshold),
+            |b| {
+                #[allow(clippy::redundant_closure)]
+                b.iter(|| vec())
             },
         );
     }
@@ -207,6 +255,7 @@ criterion_group!(
     bench_final_exponentiation,
     bench_pairing,
     bench_product_of_pairings,
+    bench_random_poly,
 );
 
 criterion_main!(benches);
