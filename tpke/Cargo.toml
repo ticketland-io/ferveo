@@ -37,8 +37,8 @@ bincode = "1.3.3"
 criterion = { version = "0.4", features = ["html_reports"] }
 
 [[bench]]
-name = "benchmarks"
-path = "benches/lib.rs"
+name = "tpke"
+path = "benches/tpke.rs"
 harness = false
 
 [profile.release]

@@ -14,7 +14,7 @@ on:
 
 env:
   CARGO_INCREMENTAL: 0
-  # RUSTFLAGS: "-Dwarnings"
+   RUSTFLAGS: "-Dwarnings"
 
 jobs:
   check:
@@ -117,7 +117,7 @@ jobs:
           touch $OUTPUT_PATH/output.txt;
           # Currently fails to extract benchmark information https://github.com/rhysd/github-action-benchmark/issues/39
           # That's why '::' is replaced with ' '
-          cargo bench -- --output-format bencher | sed 's/::/__/' | tee $OUTPUT_PATH/output.txt;
+          cargo bench --bench ${{ matrix.component }} -- --output-format bencher | sed 's/::/__/' | tee $OUTPUT_PATH/output.txt;
           echo "Saved output to $OUTPUT_PATH/output.txt";
           popd
 

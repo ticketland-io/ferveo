@@ -2,7 +2,9 @@
 #![allow(clippy::unit_arg)]
 
 use ark_bls12_381::{Bls12_381, Fr};
-use criterion::{black_box, criterion_group, BenchmarkId, Criterion};
+use criterion::{
+    black_box, criterion_group, criterion_main, BenchmarkId, Criterion,
+};
 
 use ark_ec::{
     prepare_g1, prepare_g2, AffineCurve, PairingEngine, ProjectiveCurve,
@@ -360,3 +362,5 @@ criterion_group!(
     bench_pairing,
     bench_product_of_pairings,
 );
+
+criterion_main!(benches);
