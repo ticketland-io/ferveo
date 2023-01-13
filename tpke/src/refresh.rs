@@ -118,8 +118,8 @@ pub fn make_random_ark_polynomial_at<E: PairingEngine>(
     threshold_poly[0] = E::Fr::zero();
     let d_i_0 = E::Fr::zero() - threshold_poly.evaluate(root);
     threshold_poly[0] = d_i_0;
-    assert_eq!(threshold_poly.evaluate(root), E::Fr::zero());
-    assert_eq!(threshold_poly.coeffs.len(), threshold);
+    debug_assert!(threshold_poly.evaluate(root) == E::Fr::zero());
+    debug_assert!(threshold_poly.coeffs.len() == threshold);
     threshold_poly.coeffs
 }
 
