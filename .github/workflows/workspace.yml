@@ -81,7 +81,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ test ]
     strategy:
-      fail-fast: false
       matrix:
         component:
           - tpke
@@ -117,8 +116,8 @@ jobs:
           mkdir -p $OUTPUT_PATH;
           touch $OUTPUT_PATH/output.txt;
           # Currently fails to extract benchmark information https://github.com/rhysd/github-action-benchmark/issues/39
-          # Thats why '::' is replaced with ' '
-          cargo bench -- --output-format bencher | sed 's/::/__/' | tee $OUTPUT_PATH/output.txt;
+          # That's why '::' is replaced with ' '
+          cargo bench --bench ${{ matrix.component }} -- --output-format bencher | sed 's/::/__/' | tee $OUTPUT_PATH/output.txt;
           echo "Saved output to $OUTPUT_PATH/output.txt";
           popd
 

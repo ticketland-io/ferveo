@@ -370,6 +370,7 @@ mod tests {
         let (pubkey, privkey, _) = setup_fast::<E>(threshold, shares_num, rng);
 
         let ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
+
         let plaintext = checked_decrypt(&ciphertext, aad, privkey);
 
         assert_eq!(msg, plaintext)
@@ -464,14 +465,14 @@ mod tests {
 
     #[test]
     fn simple_threshold_decryption() {
-        let rng = &mut test_rng();
+        let mut rng = &mut test_rng();
+        let threshold = 16 * 2 / 3;
         let shares_num = 16;
-        let threshold = shares_num * 2 / 3;
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, _, contexts) =
-            setup_simple::<E>(threshold, shares_num, rng);
+            setup_simple::<E>(threshold, shares_num, &mut rng);
 
         // Ciphertext.commitment is already computed to match U
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
@@ -481,8 +482,9 @@ mod tests {
             .iter()
             .map(|c| c.create_share(&ciphertext))
             .collect();
-        let pub_contexts = &contexts[0].public_decryption_contexts;
-        let lagrange = prepare_combine_simple::<E>(pub_contexts);
+        let lagrange = prepare_combine_simple::<E>(
+            &contexts[0].public_decryption_contexts,
+        );
 
         let shared_secret =
             share_combine_simple::<E>(&decryption_shares, &lagrange);
