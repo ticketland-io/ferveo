@@ -439,36 +439,6 @@ mod tests {
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
-        let (pubkey, _privkey, contexts) =
-            setup::<E>(threshold, shares_num, &mut rng);
-        let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
-
-        let mut shares: Vec<DecryptionShare<E>> = vec![];
-        for context in contexts.iter() {
-            shares.push(context.create_share(&ciphertext));
-        }
-
-        /*for pub_context in contexts[0].public_decryption_contexts.iter() {
-            assert!(pub_context
-                .blinded_key_shares
-                .verify_blinding(&pub_context.public_key_shares, rng));
-        }*/
-        let prepared_blinded_key_shares =
-            prepare_combine(&contexts[0].public_decryption_contexts, &shares);
-        let shared_secret =
-            share_combine(&shares, &prepared_blinded_key_shares);
-
-        test_ciphertext_validation_fails(msg, aad, &ciphertext, &shared_secret);
-    }
-
-    #[test]
-    fn fast_threshold_encryption() {
-        let mut rng = &mut test_rng();
-        let threshold = 16 * 2 / 3;
-        let shares_num = 16;
-        let msg: &[u8] = "abc".as_bytes();
-        let aad: &[u8] = "my-aad".as_bytes();
-
         let (pubkey, _, contexts) =
             setup_fast::<E>(threshold, shares_num, &mut rng);
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
