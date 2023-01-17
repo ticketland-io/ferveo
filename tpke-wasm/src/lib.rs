@@ -250,6 +250,7 @@ pub fn decrypt(ciphertext: &Ciphertext, private_key: &PrivateKey) -> Vec<u8> {
         &ciphertext.aad,
         private_key.0,
     )
+    .unwrap()
 }
 
 #[wasm_bindgen]

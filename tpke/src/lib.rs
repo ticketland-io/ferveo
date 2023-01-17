@@ -311,7 +311,7 @@ mod tests {
 
         let ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
 
-        let plaintext = checked_decrypt(&ciphertext, aad, privkey);
+        let plaintext = checked_decrypt(&ciphertext, aad, privkey).unwrap();
 
         assert_eq!(msg, plaintext)
     }
@@ -360,15 +360,46 @@ mod tests {
         let mut ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
 
         // So far, the ciphertext is valid
-        assert!(check_ciphertext_validity(&ciphertext, aad));
+        assert!(check_ciphertext_validity(&ciphertext, aad).is_ok());
 
         // Malformed the ciphertext
         ciphertext.ciphertext[0] += 1;
-        assert!(!check_ciphertext_validity(&ciphertext, aad));
+        assert!(check_ciphertext_validity(&ciphertext, aad).is_err());
 
         // Malformed the AAD
         let aad = "bad aad".as_bytes();
-        assert!(!check_ciphertext_validity(&ciphertext, aad));
+        assert!(check_ciphertext_validity(&ciphertext, aad).is_err());
+    }
+
+    #[test]
+    fn fast_decryption_share_validation() {
+        let rng = &mut test_rng();
+        let shares_num = 16;
+        let threshold = shares_num * 2 / 3;
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
+
+        let (pubkey, _, contexts) = setup_fast::<E>(threshold, shares_num, rng);
+        let ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
+
+        let bad_aad = "bad aad".as_bytes();
+        assert!(contexts[0].create_share(&ciphertext, bad_aad).is_err());
+    }
+
+    #[test]
+    fn simple_decryption_share_validation() {
+        let rng = &mut test_rng();
+        let shares_num = 16;
+        let threshold = shares_num * 2 / 3;
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
+
+        let (pubkey, _, contexts) =
+            setup_simple::<E>(threshold, shares_num, rng);
+        let ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
+
+        let bad_aad = "bad aad".as_bytes();
+        assert!(contexts[0].create_share(&ciphertext, bad_aad).is_err());
     }
 
     #[test]
@@ -385,9 +416,10 @@ mod tests {
 
         let mut shares: Vec<DecryptionShareFast<E>> = vec![];
         for context in contexts.iter() {
-            shares.push(context.create_share(&ciphertext));
+            shares.push(context.create_share(&ciphertext, aad).unwrap());
         }
 
+        // TODO: Verify and enable this check
         /*for pub_context in contexts[0].public_decryption_contexts.iter() {
             assert!(pub_context
                 .blinded_key_shares
@@ -420,7 +452,7 @@ mod tests {
         // Create decryption shares
         let decryption_shares: Vec<_> = contexts
             .iter()
-            .map(|c| c.create_share(&ciphertext))
+            .map(|c| c.create_share(&ciphertext, aad).unwrap())
             .collect();
         let domain = contexts[0]
             .public_decryption_contexts
@@ -477,10 +509,11 @@ mod tests {
     fn make_shared_secret_from_contexts<E: PairingEngine>(
         contexts: &[PrivateDecryptionContextSimple<E>],
         ciphertext: &Ciphertext<E>,
+        aad: &[u8],
     ) -> E::Fqk {
         let decryption_shares: Vec<_> = contexts
             .iter()
-            .map(|c| c.create_share(ciphertext))
+            .map(|c| c.create_share(ciphertext, aad).unwrap())
             .collect();
         make_shared_secret(
             &contexts[0].public_decryption_contexts,
@@ -523,7 +556,7 @@ mod tests {
 
         // Create an initial shared secret
         let old_shared_secret =
-            make_shared_secret_from_contexts(&contexts, &ciphertext);
+            make_shared_secret_from_contexts(&contexts, &ciphertext, aad);
 
         // Now, we're going to recover a new share at a random point and check that the shared secret is still the same
 
@@ -549,7 +582,7 @@ mod tests {
         // Creating decryption shares
         let mut decryption_shares: Vec<_> = remaining_participants
             .iter()
-            .map(|c| c.create_share(&ciphertext))
+            .map(|c| c.create_share(&ciphertext, aad).unwrap())
             .collect();
         decryption_shares.push(DecryptionShareSimple {
             decrypter_index: removed_participant.index,
@@ -586,7 +619,7 @@ mod tests {
 
         // Create an initial shared secret
         let old_shared_secret =
-            make_shared_secret_from_contexts(&contexts, &ciphertext);
+            make_shared_secret_from_contexts(&contexts, &ciphertext, aad);
 
         // Now, we're going to refresh the shares and check that the shared secret is the same
 

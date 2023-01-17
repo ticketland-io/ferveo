@@ -49,7 +49,8 @@ impl SetupFast {
 
         let mut decryption_shares: Vec<DecryptionShareFast<E>> = vec![];
         for context in contexts.iter() {
-            decryption_shares.push(context.create_share(&ciphertext));
+            decryption_shares
+                .push(context.create_share(&ciphertext, aad).unwrap());
         }
 
         let pub_contexts = contexts[0].clone().public_decryption_contexts;
@@ -106,7 +107,7 @@ impl SetupSimple {
         // Creating decryption shares
         let decryption_shares: Vec<_> = contexts
             .iter()
-            .map(|context| context.create_share(&ciphertext))
+            .map(|context| context.create_share(&ciphertext, aad).unwrap())
             .collect();
 
         let pub_contexts = contexts[0].clone().public_decryption_contexts;
@@ -154,7 +155,12 @@ pub fn bench_create_decryption_share(c: &mut Criterion) {
                     setup
                         .contexts
                         .iter()
-                        .map(|ctx| ctx.create_share(&setup.shared.ciphertext))
+                        .map(|ctx| {
+                            ctx.create_share(
+                                &setup.shared.ciphertext,
+                                &setup.shared.aad,
+                            )
+                        })
                         .collect::<Vec<_>>()
                 })
             }
@@ -168,7 +174,12 @@ pub fn bench_create_decryption_share(c: &mut Criterion) {
                     setup
                         .contexts
                         .iter()
-                        .map(|ctx| ctx.create_share(&setup.shared.ciphertext))
+                        .map(|ctx| {
+                            ctx.create_share(
+                                &setup.shared.ciphertext,
+                                &setup.shared.aad,
+                            )
+                        })
                         .collect::<Vec<_>>()
                 })
             }

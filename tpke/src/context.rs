@@ -40,17 +40,22 @@ impl<E: PairingEngine> PrivateDecryptionContextFast<E> {
     pub fn create_share(
         &self,
         ciphertext: &Ciphertext<E>,
-    ) -> DecryptionShareFast<E> {
+        aad: &[u8],
+    ) -> Result<DecryptionShareFast<E>> {
+        check_ciphertext_validity::<E>(ciphertext, aad)?;
+
         let decryption_share = ciphertext
             .commitment
             .mul(self.setup_params.b_inv)
             .into_affine();
 
-        DecryptionShareFast {
+        Ok(DecryptionShareFast {
             decrypter_index: self.index,
             decryption_share,
-        }
+        })
     }
+
+    // TODO: Figure out what this check is doing and how to use it
     pub fn batch_verify_decryption_shares<R: RngCore>(
         &self,
         ciphertexts: &[Ciphertext<E>],
@@ -126,18 +131,22 @@ pub struct PrivateDecryptionContextSimple<E: PairingEngine> {
 }
 
 impl<E: PairingEngine> PrivateDecryptionContextSimple<E> {
+    // TODO: Rename to checked_create_share? Or get rid of this "checked_ notation"?
     pub fn create_share(
         &self,
         ciphertext: &Ciphertext<E>,
-    ) -> DecryptionShareSimple<E> {
+        aad: &[u8],
+    ) -> Result<DecryptionShareSimple<E>> {
+        check_ciphertext_validity::<E>(ciphertext, aad)?;
+
         let u = ciphertext.commitment;
         let z_i = self.private_key_share.clone();
         let z_i = z_i.private_key_share;
         // C_i = e(U, Z_i)
         let c_i = E::pairing(u, z_i);
-        DecryptionShareSimple {
+        Ok(DecryptionShareSimple {
             decrypter_index: self.index,
             decryption_share: c_i,
-        }
+        })
     }
 }
