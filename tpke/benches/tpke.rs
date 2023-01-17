@@ -175,7 +175,7 @@ pub fn bench_create_decryption_share(c: &mut Criterion) {
             }
         };
         let simple_precomputed = {
-            let setup = SetupSimple::new(shares_num, rng);
+            let setup = SetupSimple::new(shares_num, MSG_SIZE_CASES[0], rng);
             move || {
                 black_box(
                     setup
@@ -274,7 +274,7 @@ pub fn bench_share_combine(c: &mut Criterion) {
             }
         };
         let simple_precomputed = {
-            let setup = SetupSimple::new(shares_num, rng);
+            let setup = SetupSimple::new(shares_num, MSG_SIZE_CASES[0], rng);
 
             let decryption_shares: Vec<_> = setup
                 .contexts
