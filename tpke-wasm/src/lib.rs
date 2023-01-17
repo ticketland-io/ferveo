@@ -280,7 +280,7 @@ impl SharedSecretBuilder {
     }
 
     #[wasm_bindgen]
-    pub fn build(&self) -> SharedSecret {
+    pub fn build(&self, ciphertext: &Ciphertext) -> SharedSecret {
         set_panic_hook();
 
         if self.shares.len() != self.contexts.len() {
@@ -289,10 +289,16 @@ impl SharedSecretBuilder {
 
         let prepared_blinded_key_shares =
             tpke::prepare_combine_fast(&self.contexts, &self.shares);
-        let shared_secret = tpke::share_combine_fast(
+
+        let mut rng = rand::thread_rng();
+        let shared_secret = tpke::checked_share_combine_fast(
+            &self.contexts,
+            &[ciphertext.ciphertext.clone()], // TODO: Avoid clone here
             &self.shares,
             &prepared_blinded_key_shares,
-        );
+            &mut rng,
+        )
+        .unwrap();
         SharedSecret(shared_secret)
     }
 }

@@ -43,7 +43,7 @@ pub fn bench_encrypt_combine(c: &mut Criterion) {
                 for share in decryption_shares {
                     ss_builder.add_decryption_share(&share);
                 }
-                ss_builder.build();
+                ss_builder.build(&ciphertext);
             })
         }
     }

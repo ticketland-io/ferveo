@@ -41,10 +41,12 @@ pub trait ThresholdEncryptionParameters {
 #[derive(Debug, Error)]
 pub enum ThresholdEncryptionError {
     /// Error
+    /// Refers to the check 4.4.2 in the paper: https://eprint.iacr.org/2022/898.pdf
     #[error("ciphertext verification failed")]
     CiphertextVerificationFailed,
 
     /// Error
+    /// Refers to the check 4.4.4 in the paper: https://eprint.iacr.org/2022/898.pdf
     #[error("Decryption share verification failed")]
     DecryptionShareVerificationFailed,
 
@@ -157,7 +159,6 @@ pub fn setup_fast<E: PairingEngine>(
                 b_inv: b.inverse().unwrap(),
                 g,
                 g_inv: E::G1Prepared::from(-g),
-                h_inv: E::G2Prepared::from(-h),
                 h,
             },
             private_key_share,
@@ -171,6 +172,7 @@ pub fn setup_fast<E: PairingEngine>(
             },
             blinded_key_share: blinded_key_shares,
             lagrange_n_0: *domain,
+            h_inv: E::G2Prepared::from(-h),
         });
     }
     for private in private_contexts.iter_mut() {
@@ -243,7 +245,6 @@ pub fn setup_simple<E: PairingEngine>(
                 b_inv: b.inverse().unwrap(),
                 g,
                 g_inv: E::G1Prepared::from(-g),
-                h_inv: E::G2Prepared::from(-h),
                 h,
             },
             private_key_share,
@@ -414,9 +415,10 @@ mod tests {
             setup_fast::<E>(threshold, shares_num, &mut rng);
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
-        let mut shares: Vec<DecryptionShareFast<E>> = vec![];
+        let mut decryption_shares: Vec<DecryptionShareFast<E>> = vec![];
         for context in contexts.iter() {
-            shares.push(context.create_share(&ciphertext, aad).unwrap());
+            decryption_shares
+                .push(context.create_share(&ciphertext, aad).unwrap());
         }
 
         // TODO: Verify and enable this check
@@ -425,12 +427,20 @@ mod tests {
                 .blinded_key_shares
                 .verify_blinding(&pub_context.public_key_shares, rng));
         }*/
+
         let prepared_blinded_key_shares = prepare_combine_fast(
             &contexts[0].public_decryption_contexts,
-            &shares,
+            &decryption_shares,
         );
-        let shared_secret =
-            share_combine_fast(&shares, &prepared_blinded_key_shares);
+
+        let shared_secret = checked_share_combine_fast(
+            &contexts[0].public_decryption_contexts,
+            &[ciphertext.clone()],
+            &decryption_shares,
+            &prepared_blinded_key_shares,
+            rng,
+        )
+        .unwrap();
 
         test_ciphertext_validation_fails(msg, aad, &ciphertext, &shared_secret);
     }

@@ -59,6 +59,7 @@ pub fn lagrange_basis_at<E: PairingEngine>(
     lagrange_coeffs
 }
 
+// TODO: Hide this from external users. Currently blocked by usage in benchmarks.
 pub fn share_combine_fast<E: PairingEngine>(
     shares: &[DecryptionShareFast<E>],
     prepared_key_shares: &[E::G2Prepared],
@@ -77,6 +78,28 @@ pub fn share_combine_fast<E: PairingEngine>(
         ));
     }
     E::product_of_pairings(&pairing_product)
+}
+
+pub fn checked_share_combine_fast<R: RngCore, E: PairingEngine>(
+    pub_contexts: &[PublicDecryptionContextFast<E>],
+    ciphertexts: &[Ciphertext<E>],
+    decryption_shares: &[DecryptionShareFast<E>],
+    prepared_key_shares: &[E::G2Prepared],
+    rng: &mut R,
+) -> Result<E::Fqk> {
+    let is_valid_shares = batch_verify_decryption_shares(
+        pub_contexts,
+        ciphertexts,
+        // TODO: Figure out why batch verification takes an array of decryption shares and ciphertexts
+        &[decryption_shares.to_vec()],
+        rng,
+    );
+    if !is_valid_shares {
+        return Err(
+            ThresholdEncryptionError::DecryptionShareVerificationFailed,
+        );
+    }
+    Ok(share_combine_fast(decryption_shares, prepared_key_shares))
 }
 
 pub fn share_combine_simple<E: PairingEngine>(

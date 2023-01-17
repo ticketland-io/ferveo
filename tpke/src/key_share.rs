@@ -1,6 +1,3 @@
-#![allow(non_snake_case)]
-#![allow(dead_code)]
-
 use crate::*;
 use ark_ec::ProjectiveCurve;
 
@@ -29,7 +26,7 @@ impl<E: PairingEngine> BlindedKeyShare<E> {
             g + public_key_share.public_key_share.mul(alpha).into_affine(),
         );
 
-        // Sum of Yi
+        // \sum_i(Y_i)
         let alpha_z = E::G2Prepared::from(
             self.blinding_key + self.blinded_key_share.mul(alpha).into_affine(),
         );

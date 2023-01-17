@@ -13,11 +13,12 @@ use crate::{construct_tag_hash, hash_to_g2};
 
 #[derive(Clone, Debug)]
 pub struct Ciphertext<E: PairingEngine> {
-    pub commitment: E::G1Affine,
     // U
     pub auth_tag: E::G2Affine,
     // W
-    pub ciphertext: Vec<u8>, // V
+    pub ciphertext: Vec<u8>,
+    // V
+    pub commitment: E::G1Affine,
 }
 
 impl<E: PairingEngine> Ciphertext<E> {
@@ -110,6 +111,7 @@ pub fn check_ciphertext_validity<E: PairingEngine>(
     aad: &[u8],
 ) -> Result<()> {
     let g_inv = E::G1Prepared::from(-E::G1Affine::prime_subgroup_generator());
+    // H_G2(U, aad)
     let hash_g2 = E::G2Prepared::from(construct_tag_hash::<E>(
         c.commitment,
         &c.ciphertext[..],
@@ -117,6 +119,7 @@ pub fn check_ciphertext_validity<E: PairingEngine>(
     ));
 
     let is_ciphertext_valid = E::product_of_pairings(&[
+        // e(U, H_G2(U, aad)) = e(G, W)
         (E::G1Prepared::from(c.commitment), hash_g2),
         (g_inv, E::G2Prepared::from(c.auth_tag)),
     ]) == E::Fqk::one();
