@@ -25,8 +25,7 @@ pub struct PubliclyVerifiableDkg<E: PairingEngine> {
 impl<E: PairingEngine> PubliclyVerifiableDkg<E> {
     /// Create a new DKG context to participate in the DKG
     /// Every identity in the DKG is linked to an ed25519 public key;
-    /// `validator_set`: The set of validators and their respective voting powers
-    ///                  *IMPORTANT: this set should be reverse sorted*
+    /// `validatorst`: List of validators
     /// `params` contains the parameters of the DKG such as number of shares
     /// `me` the validator creating this instance
     /// `session_keypair` the keypair for `me`
@@ -290,14 +289,13 @@ pub(crate) mod test_common {
     }
 
     pub fn setup_dkg_for_n_validators(
-        n_validators: u32,
         security_threshold: u32,
         shares_num: u32,
         my_index: usize,
     ) -> PubliclyVerifiableDkg<EllipticCurve> {
-        let keypairs = gen_n_keypairs(n_validators);
+        let keypairs = gen_n_keypairs(shares_num);
         for _keypair in &keypairs {}
-        let validators = gen_n_validators(&keypairs, n_validators);
+        let validators = gen_n_validators(&keypairs, shares_num);
         let me = validators[my_index].clone();
         PubliclyVerifiableDkg::new(
             validators,
@@ -317,7 +315,7 @@ pub(crate) mod test_common {
     ///
     /// The [`test_dkg_init`] module checks correctness of this setup
     pub fn setup_dkg(validator: usize) -> PubliclyVerifiableDkg<EllipticCurve> {
-        setup_dkg_for_n_validators(4, 2, 6, validator)
+        setup_dkg_for_n_validators(2, 4, validator)
     }
 
     /// Set up a dkg with enough pvss transcripts to meet the threshold
@@ -331,7 +329,6 @@ pub(crate) mod test_common {
         security_threshold: u32,
         shares_num: u32,
     ) -> PubliclyVerifiableDkg<EllipticCurve> {
-        let n_validators = shares_num;
         // Make sure that the number of shares is a power of 2 for the FFT to work (Radix-2 FFT domain is being used)
         let is_power_of_2 = |n: u32| n != 0 && (n & (n - 1)) == 0;
         assert!(is_power_of_2(shares_num));
@@ -339,9 +336,8 @@ pub(crate) mod test_common {
         let rng = &mut ark_std::test_rng();
 
         // Gather everyone's transcripts
-        let transcripts = (0..n_validators).map(|i| {
+        let transcripts = (0..shares_num).map(|i| {
             let mut dkg = setup_dkg_for_n_validators(
-                n_validators,
                 security_threshold,
                 shares_num,
                 i as usize,
@@ -350,12 +346,8 @@ pub(crate) mod test_common {
         });
 
         // Our test dkg
-        let mut dkg = setup_dkg_for_n_validators(
-            n_validators,
-            security_threshold,
-            shares_num,
-            0,
-        );
+        let mut dkg =
+            setup_dkg_for_n_validators(security_threshold, shares_num, 0);
         transcripts.enumerate().for_each(|(sender, pvss)| {
             dkg.apply_message(dkg.validators[sender].validator.clone(), pvss)
                 .expect("Setup failed");
@@ -428,7 +420,7 @@ mod test_dealing {
         }
         // our test dkg
         let mut dkg = setup_dkg(0);
-        // iterate over transcripts
+
         let mut expected = 0u32;
         for (sender, pvss) in transcripts.iter().enumerate() {
             // check the verification passes
@@ -442,9 +434,9 @@ mod test_dealing {
                     pvss.clone(),
                 )
                 .is_ok());
-            expected += 1; // dkg.validators[3 - sender].validator.power as u32;
-                           // As long as we still have transcripts to deal, we should be in the Dealt state
-            if sender < transcripts.len() - 1 {
+
+            expected += 1;
+            if sender < (dkg.params.security_threshold - 1) as usize {
                 // check that shares accumulates correctly
                 match dkg.state {
                     DkgState::Sharing {
@@ -501,6 +493,7 @@ mod test_dealing {
     fn test_pvss_sent_twice_rejected() {
         let rng = &mut ark_std::test_rng();
         let mut dkg = setup_dkg(0);
+        // We start with an empty state
         assert!(matches!(
             dkg.state,
             DkgState::Sharing {
@@ -508,13 +501,13 @@ mod test_dealing {
                 block: 0,
             }
         ));
+
         let pvss = dkg.share(rng).expect("Test failed");
         let sender = dkg.validators[3].validator.clone();
-        // check that verification fails
+
+        // First PVSS is accepted
         assert!(dkg.verify_message(&sender, &pvss).is_ok());
-        // check that application fails
         assert!(dkg.apply_message(sender.clone(), pvss.clone()).is_ok());
-        // check that state has appropriately changed
         assert!(matches!(
             dkg.state,
             DkgState::Sharing {
@@ -522,7 +515,8 @@ mod test_dealing {
                 block: 0,
             }
         ));
-        // check that sending another pvss from same sender fails
+
+        // Second PVSS is rejected
         assert!(dkg.verify_message(&sender, &pvss).is_err());
     }
 
@@ -532,6 +526,7 @@ mod test_dealing {
     fn test_own_pvss() {
         let rng = &mut ark_std::test_rng();
         let mut dkg = setup_dkg(0);
+        // We start with an empty state
         assert!(matches!(
             dkg.state,
             DkgState::Sharing {
@@ -539,8 +534,10 @@ mod test_dealing {
                 block: 0,
             }
         ));
-        // create share message and check state update
+
+        // Sender creates a PVSS transcript
         let pvss = dkg.share(rng).expect("Test failed");
+        // Note that state of DKG has not changed
         assert!(matches!(
             dkg.state,
             DkgState::Sharing {
@@ -548,11 +545,12 @@ mod test_dealing {
                 block: 0,
             }
         ));
+
         let sender = dkg.validators[0].validator.clone();
-        // check that verification fails
+
+        // Sender verifies it's own PVSS transcript
         assert!(dkg.verify_message(&sender, &pvss).is_ok());
         assert!(dkg.apply_message(sender, pvss).is_ok());
-        // check that state did not change
         assert!(matches!(
             dkg.state,
             DkgState::Sharing {
@@ -582,7 +580,7 @@ mod test_dealing {
         assert!(dkg.share(rng).is_err());
 
         // check that even if security threshold is met, we can still share
-        dkg.state = DkgState::Dealt;
+        dkg.state = Dealt;
         assert!(dkg.share(rng).is_ok());
     }
 
@@ -609,7 +607,7 @@ mod test_dealing {
         assert!(dkg.apply_message(sender.clone(), pvss.clone()).is_err());
 
         // check that we can still accept pvss transcripts after meeting threshold
-        dkg.state = DkgState::Dealt;
+        dkg.state = Dealt;
         assert!(dkg.verify_message(&sender, &pvss).is_ok());
         assert!(dkg.apply_message(sender, pvss).is_ok());
         assert!(matches!(dkg.state, DkgState::Dealt))
@@ -634,7 +632,7 @@ mod test_dealing {
     fn test_pvss_wait_if_not_in_sharing_state() {
         let mut dkg = setup_dkg(0);
         for state in vec![
-            DkgState::Dealt,
+            Dealt,
             DkgState::Success {
                 final_key: G1::zero(),
             },

@@ -34,7 +34,7 @@ pub fn gen_validators(
 pub fn setup_dkg(
     validator: usize,
     num: u64,
-    shares: u32,
+    shares_num: u32,
 ) -> PubliclyVerifiableDkg<EllipticCurve> {
     let keypairs = gen_keypairs(num);
     let validators = gen_validators(&keypairs);
@@ -43,8 +43,8 @@ pub fn setup_dkg(
         validators,
         Params {
             tau: 0,
-            security_threshold: shares / 3,
-            shares_num: shares,
+            security_threshold: shares_num / 3,
+            shares_num,
             retry_after: 1,
         },
         &me,

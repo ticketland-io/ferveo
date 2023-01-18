@@ -88,7 +88,7 @@ impl<E: PairingEngine, T> PubliclyVerifiableSS<E, T> {
                 // ek_{i}^{eval_i}, i = validator index
                 fast_multiexp(
                     // &evals.evals[i..i] = &evals.evals[i]
-                    &[evals.evals[val.share_index]],
+                    &[evals.evals[val.share_index]], // one share per validator
                     val.validator.public_key.encryption_key.into_projective(),
                 )[0]
             })
@@ -102,7 +102,6 @@ impl<E: PairingEngine, T> PubliclyVerifiableSS<E, T> {
         // TODO: Cross check proof of knowledge check with the whitepaper; this check proves that there is a relationship between the secret and the pvss transcript
         // Sigma is a proof of knowledge of the secret, sigma = h^s
         let sigma = E::G2Affine::prime_subgroup_generator().mul(*s).into(); //todo hash to curve
-                                                                            // So at this point, we have a commitment to the polynomial, a number of shares, and a proof of knowledge
         let vss = Self {
             coeffs,
             shares,
@@ -306,9 +305,12 @@ mod test_pvss {
         // check that the chosen secret coefficient is correct
         assert_eq!(pvss.coeffs[0], G1::prime_subgroup_generator().mul(s));
         //check that a polynomial of the correct degree was created
-        assert_eq!(pvss.coeffs.len(), 5);
+        assert_eq!(
+            pvss.coeffs.len(),
+            dkg.params.security_threshold as usize + 1
+        );
         // check that the correct number of shares were created
-        assert_eq!(pvss.shares.len(), 4);
+        assert_eq!(pvss.shares.len(), dkg.validators.len());
         // check that the prove of knowledge is correct
         assert_eq!(pvss.sigma, G2::prime_subgroup_generator().mul(s));
         // check that the optimistic verify returns true
@@ -343,15 +345,21 @@ mod test_pvss {
         let dkg = setup_dealt_dkg();
         let aggregate = aggregate(&dkg);
         //check that a polynomial of the correct degree was created
-        assert_eq!(aggregate.coeffs.len(), 3);
+        assert_eq!(
+            aggregate.coeffs.len(),
+            dkg.params.security_threshold as usize + 1
+        );
         // check that the correct number of shares were created
-        assert_eq!(aggregate.shares.len(), 4);
+        assert_eq!(aggregate.shares.len(), dkg.validators.len());
         // check that the optimistic verify returns true
         assert!(aggregate.verify_optimistic());
         // check that the full verify returns true
         assert!(aggregate.verify_full(&dkg));
         // check that the verification of aggregation passes
-        assert_eq!(aggregate.verify_aggregation(&dkg).expect("Test failed"), 4);
+        assert_eq!(
+            aggregate.verify_aggregation(&dkg).expect("Test failed"),
+            dkg.validators.len() as u32
+        );
     }
 
     /// Check that if the aggregated pvss transcript has an
