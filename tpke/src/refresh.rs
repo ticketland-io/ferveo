@@ -2,7 +2,6 @@ use crate::{lagrange_basis_at, PrivateDecryptionContextSimple};
 use ark_ec::{PairingEngine, ProjectiveCurve};
 use ark_ff::{PrimeField, Zero};
 use ark_poly::{univariate::DensePolynomial, Polynomial, UVPolynomial};
-use ark_std::UniformRand;
 use itertools::zip_eq;
 use rand::prelude::StdRng;
 use rand_core::RngCore;
@@ -91,36 +90,20 @@ pub fn make_random_polynomial_at<E: PairingEngine>(
     rng: &mut impl RngCore,
 ) -> DensePolynomial<E::Fr> {
     // [][threshold-1]
-    let mut d_i = (0..threshold - 1)
-        .map(|_| E::Fr::rand(rng))
-        .collect::<Vec<_>>();
+    let mut threshold_poly = DensePolynomial::<E::Fr>::rand(threshold - 1, rng);
+
     // [0..][threshold]
-    d_i.insert(0, E::Fr::zero());
-    let mut d_i = DensePolynomial::from_coefficients_vec(d_i);
+    threshold_poly[0] = E::Fr::zero();
 
     // Now, we calculate d_i_0
     // This is the term that will "zero out" the polynomial at x_r, d_i(x_r) = 0
-    let d_i_0 = E::Fr::zero() - d_i.evaluate(root);
-    d_i[0] = d_i_0;
-
-    debug_assert!(d_i.evaluate(root) == E::Fr::zero());
-    debug_assert!(d_i.len() == threshold);
-
-    d_i
-}
-
-pub fn make_random_ark_polynomial_at<E: PairingEngine>(
-    threshold: usize,
-    root: &E::Fr,
-    rng: &mut impl RngCore,
-) -> Vec<E::Fr> {
-    let mut threshold_poly = DensePolynomial::<E::Fr>::rand(threshold - 1, rng);
-    threshold_poly[0] = E::Fr::zero();
     let d_i_0 = E::Fr::zero() - threshold_poly.evaluate(root);
     threshold_poly[0] = d_i_0;
+
     debug_assert!(threshold_poly.evaluate(root) == E::Fr::zero());
     debug_assert!(threshold_poly.coeffs.len() == threshold);
-    threshold_poly.coeffs
+
+    threshold_poly
 }
 
 fn prepare_share_updates_for_refreshing<E: PairingEngine>(
