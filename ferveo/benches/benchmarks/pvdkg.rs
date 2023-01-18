@@ -69,7 +69,7 @@ pub fn setup_dkg(
         Params {
             tau: 0,
             security_threshold: 300 / 3,
-            shares_num: 4,
+            shares_num: 300,
             retry_after: 2,
         },
         &me,

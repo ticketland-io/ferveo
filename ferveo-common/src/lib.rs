@@ -38,7 +38,7 @@ pub mod ark_serde {
     {
         use serde::ser::Error;
         let mut bytes = vec![];
-        data.serialize(&mut bytes).map_err(S::Error::custom)?;
+        data.serialize(&mut bytes).map_err(Error::custom)?;
         serde_bytes::Bytes::new(&bytes).serialize(serializer)
     }
     /// Deserialize an ark type with serde
@@ -49,7 +49,7 @@ pub mod ark_serde {
     {
         use serde::de::Error;
         let bytes = <serde_bytes::ByteBuf>::deserialize(deserializer)?;
-        T::deserialize(bytes.as_slice()).map_err(D::Error::custom)
+        T::deserialize(bytes.as_slice()).map_err(Error::custom)
     }
 }
 
