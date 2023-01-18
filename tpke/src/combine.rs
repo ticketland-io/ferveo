@@ -44,12 +44,11 @@ pub fn prepare_combine_fast<E: PairingEngine>(
 }
 
 pub fn prepare_combine_simple<E: PairingEngine>(
-    pub_contexts: &[PublicDecryptionContextSimple<E>],
+    domain: &[E::Fr],
 ) -> Vec<E::Fr> {
-    let shares_x: Vec<_> = pub_contexts.iter().map(|c| c.domain).collect();
     // See https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
     // In this formula x_i = 0, hence numerator is x_m
-    lagrange_basis_at::<E>(&shares_x, &E::Fr::zero())
+    lagrange_basis_at::<E>(domain, &E::Fr::zero())
 }
 
 /// Calculate lagrange coefficients using optimized formula
