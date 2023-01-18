@@ -84,7 +84,8 @@ mod test_dkg_full {
             &ciphertext,
             aad,
             &shared_secret,
-        );
+        )
+        .unwrap();
         assert_eq!(plaintext, msg);
     }
 
@@ -130,7 +131,8 @@ mod test_dkg_full {
             &ciphertext,
             aad,
             &shared_secret,
-        );
+        )
+        .unwrap();
         assert_eq!(plaintext, msg);
     }
 }

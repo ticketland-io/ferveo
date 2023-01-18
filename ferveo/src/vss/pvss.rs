@@ -8,7 +8,7 @@ use ark_ec::PairingEngine;
 use ark_ff::UniformRand;
 use ark_serialize::*;
 use ferveo_common::{Keypair, PublicKey};
-use group_threshold_cryptography::Ciphertext;
+use group_threshold_cryptography::{Ciphertext, DecryptionShareSimple};
 use itertools::{zip_eq, Itertools};
 use subproductdomain::fast_multiexp;
 
@@ -260,8 +260,8 @@ pub fn make_decryption_shares<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     validator_keypairs: Vec<Keypair<E>>,
     aggregate: Vec<E::G2Affine>,
-) -> Vec<E::Fqk> {
-    let decryption_shares = aggregate
+) -> Vec<DecryptionShareSimple<E>> {
+    aggregate
         .iter()
         .zip_eq(validator_keypairs.iter())
         .map(|(encrypted_share, keypair)| {
@@ -271,8 +271,14 @@ pub fn make_decryption_shares<E: PairingEngine>(
             let u = ciphertext.commitment;
             E::pairing(u, z_i)
         })
-        .collect::<Vec<_>>();
-    decryption_shares
+        .enumerate()
+        .map(
+            |(decrypter_index, decryption_share)| DecryptionShareSimple {
+                decrypter_index,
+                decryption_share,
+            },
+        )
+        .collect::<Vec<_>>()
 }
 
 #[cfg(test)]

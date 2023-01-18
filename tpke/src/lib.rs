@@ -482,11 +482,14 @@ mod tests {
             .iter()
             .map(|c| c.create_share(&ciphertext))
             .collect();
-        let lagrange = prepare_combine_simple::<E>(
-            &contexts[0].public_decryption_contexts,
-        );
+        let domain = contexts[0]
+            .public_decryption_contexts
+            .iter()
+            .map(|c| c.domain)
+            .collect::<Vec<_>>();
+        let lagrange = prepare_combine_simple::<E>(&domain);
 
-                let shared_secret =
+        let shared_secret =
             share_combine_simple::<E>(&decryption_shares, &lagrange);
 
         test_ciphertext_validation_fails(msg, aad, &ciphertext, &shared_secret);
@@ -549,7 +552,8 @@ mod tests {
         pub_contexts: &[PublicDecryptionContextSimple<E>],
         decryption_shares: &[DecryptionShareSimple<E>],
     ) -> E::Fqk {
-        let lagrange = prepare_combine_simple::<E>(pub_contexts);
+        let domain = pub_contexts.iter().map(|c| c.domain).collect::<Vec<_>>();
+        let lagrange = prepare_combine_simple::<E>(&domain);
         share_combine_simple::<E>(decryption_shares, &lagrange)
     }
 
