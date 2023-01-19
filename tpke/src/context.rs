@@ -41,9 +41,10 @@ impl<E: PairingEngine> PrivateDecryptionContextFast<E> {
         &self,
         ciphertext: &Ciphertext<E>,
     ) -> DecryptionShareFast<E> {
-        // let decryption_share =
-        //     ciphertext.commitment.mul(self.b_inv).into_affine();
-        let decryption_share = ciphertext.commitment;
+        let decryption_share = ciphertext
+            .commitment
+            .mul(self.setup_params.b_inv)
+            .into_affine();
 
         DecryptionShareFast {
             decrypter_index: self.index,
