@@ -3,6 +3,7 @@
 
 use crate::*;
 use ark_ec::ProjectiveCurve;
+use itertools::zip_eq;
 
 #[derive(Debug, Clone)]
 pub struct DecryptionShareFast<E: PairingEngine> {
@@ -46,7 +47,7 @@ pub struct DecryptionShareSimple<E: PairingEngine> {
 // TODO: Benchmark this
 pub fn batch_verify_decryption_shares<R: RngCore, E: PairingEngine>(
     pub_contexts: &[PublicDecryptionContextFast<E>],
-    ciphertexts: &[Ciphertext<E>],
+    ciphertexts: &[&Ciphertext<E>],
     decryption_shares: &[Vec<DecryptionShareFast<E>>],
     rng: &mut R,
 ) -> bool {
@@ -105,6 +106,43 @@ pub fn batch_verify_decryption_shares<R: RngCore, E: PairingEngine>(
     }
 
     E::product_of_pairings(&pairings) == E::Fqk::one()
+}
+
+// TODO: Benchmark this
+pub fn verify_decryption_shares<E: PairingEngine>(
+    pub_contexts: &[PublicDecryptionContextFast<E>],
+    ciphertext: &Ciphertext<E>,
+    decryption_shares: &[DecryptionShareFast<E>],
+) -> bool {
+    // Get [b_i] H for each of the decryption shares
+    let blinding_keys = decryption_shares
+        .iter()
+        .map(|d| {
+            pub_contexts[d.decrypter_index]
+                .blinded_key_share
+                .blinding_key_prepared
+                .clone()
+        })
+        .collect::<Vec<_>>();
+
+    for (d_i, p_i) in zip_eq(decryption_shares, blinding_keys) {
+        let mut pairings = Vec::with_capacity(2);
+
+        // e(D_i, B_i)
+        pairings.push((E::G1Prepared::from(d_i.decryption_share), p_i.clone()));
+
+        // e(U_i, -H)
+        pairings.push((
+            E::G1Prepared::from(ciphertext.commitment),
+            pub_contexts[0].h_inv.clone(),
+        ));
+
+        if E::product_of_pairings(&pairings) != E::Fqk::one() {
+            return false;
+        }
+    }
+
+    true
 }
 
 #[cfg(test)]

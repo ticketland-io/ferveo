@@ -1,3 +1,5 @@
+extern crate core;
+
 use crate::hash_to_curve::htp_bls12381_g2;
 use crate::SetupParams;
 
@@ -435,10 +437,9 @@ mod tests {
 
         let shared_secret = checked_share_combine_fast(
             &contexts[0].public_decryption_contexts,
-            &[ciphertext.clone()],
+            &ciphertext,
             &decryption_shares,
             &prepared_blinded_key_shares,
-            rng,
         )
         .unwrap();
 

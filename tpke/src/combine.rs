@@ -16,9 +16,11 @@ pub fn prepare_combine_fast<E: PairingEngine>(
     }
     let s = SubproductDomain::<E::Fr>::new(domain);
     let mut lagrange = s.inverse_lagrange_coefficients(); // 1/L_i
-                                                          // Given a vector of field elements {v_i}, compute the vector {coeff * v_i^(-1)}
+
+    // Given a vector of field elements {v_i}, compute the vector {coeff * v_i^(-1)}
     ark_ff::batch_inversion_and_mul(&mut lagrange, &n_0); // n_0 * L_i
-                                                          // L_i * [b]Z_i
+
+    // L_i * [b]Z_i
     izip!(shares.iter(), lagrange.iter())
         .map(|(d_i, lambda)| {
             let decrypter = &public_decryption_contexts[d_i.decrypter_index];
@@ -80,20 +82,14 @@ pub fn share_combine_fast<E: PairingEngine>(
     E::product_of_pairings(&pairing_product)
 }
 
-pub fn checked_share_combine_fast<R: RngCore, E: PairingEngine>(
+pub fn checked_share_combine_fast<E: PairingEngine>(
     pub_contexts: &[PublicDecryptionContextFast<E>],
-    ciphertexts: &[Ciphertext<E>],
+    ciphertext: &Ciphertext<E>,
     decryption_shares: &[DecryptionShareFast<E>],
     prepared_key_shares: &[E::G2Prepared],
-    rng: &mut R,
 ) -> Result<E::Fqk> {
-    let is_valid_shares = batch_verify_decryption_shares(
-        pub_contexts,
-        ciphertexts,
-        // TODO: Figure out why batch verification takes an array of decryption shares and ciphertexts
-        &[decryption_shares.to_vec()],
-        rng,
-    );
+    let is_valid_shares =
+        verify_decryption_shares(pub_contexts, ciphertext, decryption_shares);
     if !is_valid_shares {
         return Err(
             ThresholdEncryptionError::DecryptionShareVerificationFailed,

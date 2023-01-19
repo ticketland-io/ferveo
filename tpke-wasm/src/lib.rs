@@ -290,13 +290,11 @@ impl SharedSecretBuilder {
         let prepared_blinded_key_shares =
             tpke::prepare_combine_fast(&self.contexts, &self.shares);
 
-        let mut rng = rand::thread_rng();
         let shared_secret = tpke::checked_share_combine_fast(
             &self.contexts,
-            &[ciphertext.ciphertext.clone()], // TODO: Avoid clone here
+            &ciphertext.ciphertext,
             &self.shares,
             &prepared_blinded_key_shares,
-            &mut rng,
         )
         .unwrap();
         SharedSecret(shared_secret)
