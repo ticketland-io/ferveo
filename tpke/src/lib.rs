@@ -147,7 +147,7 @@ pub fn setup_fast<E: PairingEngine>(
         let private_key_share = PrivateKeyShare::<E> {
             private_key_share: *private,
         };
-        let b = E::Fr::one(); // TODO: Not blinding for now
+        let b = E::Fr::rand(rng);
         let mut blinded_key_shares = private_key_share.blind(b);
         blinded_key_shares.multiply_by_omega_inv(domain_inv);
         private_contexts.push(PrivateDecryptionContextFast::<E> {
@@ -234,8 +234,7 @@ pub fn setup_simple<E: PairingEngine>(
         let private_key_share = PrivateKeyShare::<E> {
             private_key_share: *private,
         };
-        // let b = E::Fr::rand(rng);
-        let b = E::Fr::one(); // TODO: Not blinding for now
+        let b = E::Fr::rand(rng);
         let blinded_key_shares = private_key_share.blind(b);
         private_contexts.push(PrivateDecryptionContextSimple::<E> {
             index,
@@ -375,8 +374,8 @@ mod tests {
     #[test]
     fn fast_threshold_encryption() {
         let mut rng = &mut test_rng();
-        let threshold = 16 * 2 / 3;
         let shares_num = 16;
+        let threshold = shares_num * 2 / 3;
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
@@ -407,8 +406,8 @@ mod tests {
     #[test]
     fn simple_threshold_decryption() {
         let mut rng = &mut test_rng();
-        let threshold = 16 * 2 / 3;
         let shares_num = 16;
+        let threshold = shares_num * 2 / 3;
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
