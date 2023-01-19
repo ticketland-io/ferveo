@@ -205,7 +205,7 @@ pub fn bench_random_poly(c: &mut Criterion) {
     let mut group = c.benchmark_group("RandomPoly");
     group.sample_size(10);
 
-    for threshold in [1, 2, 4, 8, 16, 32, 64] {
+    for threshold in [2, 4, 8, 16, 32, 64] {
         let rng = &mut StdRng::seed_from_u64(0);
         let mut ark = {
             let mut rng = rng.clone();
