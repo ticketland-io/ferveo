@@ -74,7 +74,7 @@ fn update_shares_for_recovery<E: PairingEngine>(
         .map(|p| {
             let i = p.index;
             let mut new_y = E::G2Projective::from(
-                p.private_key_share.private_key_shares[0], // y_i
+                p.private_key_share.private_key_share, // y_i
             );
             for j in deltas.keys() {
                 new_y += deltas[j][&i];
@@ -145,7 +145,7 @@ pub fn refresh_shares<E: PairingEngine>(
         .map(|p| {
             let i = p.index;
             let mut new_y = E::G2Projective::from(
-                p.private_key_share.private_key_shares[0], // y_i
+                p.private_key_share.private_key_share, // y_i
             );
             new_y += share_updates[&i];
             new_y

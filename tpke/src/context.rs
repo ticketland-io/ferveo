@@ -3,9 +3,9 @@ use ark_ec::ProjectiveCurve;
 
 #[derive(Clone, Debug)]
 pub struct PublicDecryptionContextFast<E: PairingEngine> {
-    pub domain: Vec<E::Fr>,
-    pub public_key_shares: PublicKeyShares<E>,
-    pub blinded_key_shares: BlindedKeyShares<E>,
+    pub domain: E::Fr,
+    pub public_key_share: PublicKeyShare<E>,
+    pub blinded_key_share: BlindedKeyShare<E>,
     // This decrypter's contribution to N(0), namely (-1)^|domain| * \prod_i omega_i
     pub lagrange_n_0: E::Fr,
 }
@@ -13,8 +13,8 @@ pub struct PublicDecryptionContextFast<E: PairingEngine> {
 #[derive(Clone, Debug)]
 pub struct PublicDecryptionContextSimple<E: PairingEngine> {
     pub domain: E::Fr,
-    pub public_key_shares: PublicKeyShares<E>,
-    pub blinded_key_shares: BlindedKeyShares<E>,
+    pub public_key_share: PublicKeyShare<E>,
+    pub blinded_key_share: BlindedKeyShare<E>,
 }
 
 #[derive(Clone, Debug)]
@@ -34,7 +34,6 @@ pub struct PrivateDecryptionContextFast<E: PairingEngine> {
     pub private_key_share: PrivateKeyShare<E>,
     pub public_decryption_contexts: Vec<PublicDecryptionContextFast<E>>,
     pub scalar_bits: usize,
-    pub window_size: usize,
 }
 
 impl<E: PairingEngine> PrivateDecryptionContextFast<E> {
@@ -66,7 +65,7 @@ impl<E: PairingEngine> PrivateDecryptionContextFast<E> {
             .iter()
             .map(|d| {
                 self.public_decryption_contexts[d.decrypter_index]
-                    .blinded_key_shares
+                    .blinded_key_share
                     .blinding_key_prepared
                     .clone()
             })
@@ -132,7 +131,7 @@ impl<E: PairingEngine> PrivateDecryptionContextSimple<E> {
     ) -> DecryptionShareSimple<E> {
         let u = ciphertext.commitment;
         let z_i = self.private_key_share.clone();
-        let z_i = z_i.private_key_shares[0];
+        let z_i = z_i.private_key_share;
         // C_i = e(U, Z_i)
         let c_i = E::pairing(u, z_i);
         DecryptionShareSimple {

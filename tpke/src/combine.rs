@@ -11,30 +11,19 @@ pub fn prepare_combine_fast<E: PairingEngine>(
     let mut domain = vec![]; // omega_i, vector of domain points
     let mut n_0 = E::Fr::one();
     for d_i in shares.iter() {
-        // There's just one domain point per participant, TODO: Refactor underlying data structures
-        assert_eq!(
-            public_decryption_contexts[d_i.decrypter_index].domain.len(),
-            1
-        );
-        domain.push(public_decryption_contexts[d_i.decrypter_index].domain[0]);
+        domain.push(public_decryption_contexts[d_i.decrypter_index].domain);
         n_0 *= public_decryption_contexts[d_i.decrypter_index].lagrange_n_0; // n_0_i = 1 * t^1 * t^2 ...
     }
     let s = SubproductDomain::<E::Fr>::new(domain);
     let mut lagrange = s.inverse_lagrange_coefficients(); // 1/L_i
-                                                          // TODO: If this is really 1/L_i can I just return here and use it directly? Or is 1/L_i somehow different from L_i(0)?
                                                           // Given a vector of field elements {v_i}, compute the vector {coeff * v_i^(-1)}
     ark_ff::batch_inversion_and_mul(&mut lagrange, &n_0); // n_0 * L_i
                                                           // L_i * [b]Z_i
     izip!(shares.iter(), lagrange.iter())
         .map(|(d_i, lambda)| {
             let decrypter = &public_decryption_contexts[d_i.decrypter_index];
-            // There's just one share per participant, TODO: Refactor underlying data structures
-            assert_eq!(
-                decrypter.blinded_key_shares.blinded_key_shares.len(),
-                1
-            );
             let blinded_key_share =
-                decrypter.blinded_key_shares.blinded_key_shares[0];
+                decrypter.blinded_key_share.blinded_key_share;
             E::G2Prepared::from(
                 // [b]Z_i * L_i
                 blinded_key_share.mul(*lambda).into_affine(),
@@ -77,7 +66,7 @@ pub fn share_combine_fast<E: PairingEngine>(
     let mut pairing_product: Vec<(E::G1Prepared, E::G2Prepared)> = vec![];
 
     for (d_i, prepared_key_share) in izip!(shares, prepared_key_shares.iter()) {
-        // e(D_i, [b*omega_i^-1] Z_{i,omega_i}), TODO: Is this formula correct?
+        // e(D_i, [b*omega_i^-1] Z_{i,omega_i})
         pairing_product.push((
             // D_i
             E::G1Prepared::from(d_i.decryption_share),

@@ -56,7 +56,6 @@ impl<E: PairingEngine> Ciphertext<E> {
         );
         let auth_tag = E::G2Affine::read(&auth_tag_bytes[..]).unwrap();
 
-        const CIPHERTEXT_LEN: usize = 33;
         let ciphertext = bytes[COMMITMENT_LEN + AUTH_TAG_LEN..].to_vec();
 
         Self {
@@ -116,17 +115,6 @@ pub fn check_ciphertext_validity<E: PairingEngine>(
         (E::G1Prepared::from(c.commitment), hash_g2),
         (g_inv, E::G2Prepared::from(c.auth_tag)),
     ]) == E::Fqk::one()
-}
-
-fn decrypt<E: PairingEngine>(
-    ciphertext: &Ciphertext<E>,
-    privkey: E::G2Affine,
-) -> Vec<u8> {
-    let s = E::product_of_pairings(&[(
-        E::G1Prepared::from(ciphertext.commitment),
-        E::G2Prepared::from(privkey),
-    )]);
-    decrypt_with_shared_secret(ciphertext, &s)
 }
 
 pub fn checked_decrypt<E: PairingEngine>(
