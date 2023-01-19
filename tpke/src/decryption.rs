@@ -44,7 +44,8 @@ pub struct DecryptionShareSimple<E: PairingEngine> {
     pub decryption_share: E::Fqk,
 }
 
-// TODO: Benchmark this
+// TODO: Benchmark this against simplified implementation
+// TODO: Remove this code? Currently unused.
 pub fn batch_verify_decryption_shares<R: RngCore, E: PairingEngine>(
     pub_contexts: &[PublicDecryptionContextFast<E>],
     ciphertexts: &[&Ciphertext<E>],
@@ -109,12 +110,12 @@ pub fn batch_verify_decryption_shares<R: RngCore, E: PairingEngine>(
 }
 
 // TODO: Benchmark this
-pub fn verify_decryption_shares<E: PairingEngine>(
+pub fn verify_decryption_shares_fast<E: PairingEngine>(
     pub_contexts: &[PublicDecryptionContextFast<E>],
     ciphertext: &Ciphertext<E>,
     decryption_shares: &[DecryptionShareFast<E>],
 ) -> bool {
-    // Get [b_i] H for each of the decryption shares
+    // [b_i] H
     let blinding_keys = decryption_shares
         .iter()
         .map(|d| {
@@ -125,19 +126,18 @@ pub fn verify_decryption_shares<E: PairingEngine>(
         })
         .collect::<Vec<_>>();
 
+    // e(U, -H)
+    let pairing_a = (
+        E::G1Prepared::from(ciphertext.commitment),
+        pub_contexts[0].h_inv.clone(),
+    );
+
     for (d_i, p_i) in zip_eq(decryption_shares, blinding_keys) {
-        let mut pairings = Vec::with_capacity(2);
-
         // e(D_i, B_i)
-        pairings.push((E::G1Prepared::from(d_i.decryption_share), p_i.clone()));
-
-        // e(U_i, -H)
-        pairings.push((
-            E::G1Prepared::from(ciphertext.commitment),
-            pub_contexts[0].h_inv.clone(),
-        ));
-
-        if E::product_of_pairings(&pairings) != E::Fqk::one() {
+        let pairing_b = (E::G1Prepared::from(d_i.decryption_share), p_i);
+        if E::product_of_pairings(&[pairing_a.clone(), pairing_b.clone()])
+            != E::Fqk::one()
+        {
             return false;
         }
     }
