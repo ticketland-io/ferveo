@@ -1,4 +1,5 @@
 use crate::*;
+use ark_ec::ProjectiveCurve;
 
 #[derive(Clone, Debug)]
 pub struct PublicDecryptionContextFast<E: PairingEngine> {

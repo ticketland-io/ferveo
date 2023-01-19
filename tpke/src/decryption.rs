@@ -58,7 +58,7 @@ pub fn batch_verify_decryption_shares<R: RngCore, E: PairingEngine>(
         .iter()
         .map(|d| {
             pub_contexts[d.decrypter_index]
-                .blinded_key_shares
+                .blinded_key_share
                 .blinding_key_prepared
                 .clone()
         })
