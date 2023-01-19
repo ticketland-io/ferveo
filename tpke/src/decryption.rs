@@ -71,36 +71,36 @@ pub fn batch_verify_decryption_shares<R: RngCore, E: PairingEngine>(
 
     let mut pairings = Vec::with_capacity(num_shares + 1);
 
-    // Compute \sum_i \alpha_{i,j} for each ciphertext j
+    // Compute \sum_j \alpha_{i,j} for each ciphertext i
     let sum_alpha_i = alpha_ij
         .iter()
         .map(|alpha_j| alpha_j.iter().sum::<E::Fr>())
         .collect::<Vec<_>>();
 
-    // Compute \sum_j [ \sum_i \alpha_{i,j} ] U_j
-    let sum_u_j = E::G1Prepared::from(
+    // Compute \sum_i [ \sum_j \alpha_{i,j} ] U_i
+    let sum_u_i = E::G1Prepared::from(
         izip!(ciphertexts.iter(), sum_alpha_i.iter())
             .map(|(c, alpha_j)| c.commitment.mul(*alpha_j))
             .sum::<E::G1Projective>()
             .into_affine(),
     );
 
-    // e(\sum_j [ \sum_i \alpha_{i,j} ] U_j, -H)
-    pairings.push((sum_u_j, pub_contexts[0].h_inv.clone()));
+    // e(\sum_i [ \sum_j \alpha_{i,j} ] U_i, -H)
+    pairings.push((sum_u_i, pub_contexts[0].h_inv.clone()));
 
-    let mut sum_d_j = vec![E::G1Projective::zero(); num_shares];
+    let mut sum_d_i = vec![E::G1Projective::zero(); num_shares];
 
-    // sum_D_j = { [\sum_j \alpha_{i,j} ] D_i }
+    // sum_D_i = { [\sum_i \alpha_{i,j} ] D_i }
     for (d, alpha_j) in izip!(decryption_shares.iter(), alpha_ij.iter()) {
         for (sum_alpha_d_i, d_ij, alpha) in
-            izip!(sum_d_j.iter_mut(), d.iter(), alpha_j.iter())
+            izip!(sum_d_i.iter_mut(), d.iter(), alpha_j.iter())
         {
             *sum_alpha_d_i += d_ij.decryption_share.mul(*alpha);
         }
     }
 
-    // e([\sum_j \alpha_{i,j} ] D_i, B_i)
-    for (d_i, b_i) in izip!(sum_d_j.iter(), blinding_keys.iter()) {
+    // e([\sum_i \alpha_{i,j} ] D_i, B_i)
+    for (d_i, b_i) in izip!(sum_d_i.iter(), blinding_keys.iter()) {
         pairings.push((E::G1Prepared::from(d_i.into_affine()), b_i.clone()));
     }
 
