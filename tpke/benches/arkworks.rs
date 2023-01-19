@@ -5,16 +5,15 @@ use ark_bls12_381::{Bls12_381, Fr};
 use ark_ec::{
     prepare_g1, prepare_g2, AffineCurve, PairingEngine, ProjectiveCurve,
 };
-use ark_ff::{BigInteger256, Field, UniformRand, Zero};
+use ark_ff::{BigInteger256, Field, One, UniformRand, Zero};
 use criterion::{
     black_box, criterion_group, criterion_main, BenchmarkId, Criterion,
 };
-use group_threshold_cryptography::{
-    make_random_ark_polynomial_at, make_random_polynomial_at,
-};
+
+use group_threshold_cryptography::make_random_polynomial_at;
 use itertools::izip;
 use rand::prelude::StdRng;
-use rand_core::SeedableRng;
+use rand_core::{RngCore, SeedableRng};
 
 type E = Bls12_381;
 type G1Projective = ark_ec::bls12::G1Projective<ark_bls12_381::Parameters>;
@@ -202,25 +201,62 @@ pub fn bench_product_of_pairings(c: &mut Criterion) {
 }
 
 pub fn bench_random_poly(c: &mut Criterion) {
-    let mut group = c.benchmark_group("RandomPoly");
+    let mut group = c.benchmark_group("random_polynomial_evaluation");
     group.sample_size(10);
 
+    fn evaluate_polynomial<E: PairingEngine>(
+        polynomial: &[E::Fr],
+        x: &E::Fr,
+    ) -> E::Fr {
+        let mut result = E::Fr::zero();
+        let mut x_power = E::Fr::one();
+        for coeff in polynomial {
+            result += *coeff * x_power;
+            x_power *= x;
+        }
+        result
+    }
+
+    pub fn naive_make_random_polynomial_at<E: PairingEngine>(
+        threshold: usize,
+        root: &E::Fr,
+        rng: &mut impl RngCore,
+    ) -> Vec<E::Fr> {
+        // [][threshold-1]
+        let mut d_i = (0..threshold - 1)
+            .map(|_| E::Fr::rand(rng))
+            .collect::<Vec<_>>();
+        // [0..][threshold]
+        d_i.insert(0, E::Fr::zero());
+
+        // Now, we calculate d_i_0
+        // This is the term that will "zero out" the polynomial at x_r, d_i(x_r) = 0
+        let d_i_0 = E::Fr::zero() - evaluate_polynomial::<E>(&d_i, root);
+        d_i[0] = d_i_0;
+        assert_eq!(evaluate_polynomial::<E>(&d_i, root), E::Fr::zero());
+
+        debug_assert!(d_i.len() == threshold);
+        debug_assert!(evaluate_polynomial::<E>(&d_i, root) == E::Fr::zero());
+        d_i
+    }
+
+    // Skipping t=1, because it results in a random polynomial with t-1=0 coefficients
     for threshold in [2, 4, 8, 16, 32, 64] {
         let rng = &mut StdRng::seed_from_u64(0);
         let mut ark = {
             let mut rng = rng.clone();
             move || {
-                black_box(make_random_ark_polynomial_at::<E>(
+                black_box(make_random_polynomial_at::<E>(
                     threshold,
                     &Fr::zero(),
                     &mut rng,
                 ))
             }
         };
-        let mut vec = {
+        let mut naive = {
             let mut rng = rng.clone();
             move || {
-                black_box(make_random_polynomial_at::<E>(
+                black_box(naive_make_random_polynomial_at::<E>(
                     threshold,
                     &Fr::zero(),
                     &mut rng,
@@ -235,10 +271,10 @@ pub fn bench_random_poly(c: &mut Criterion) {
             },
         );
         group.bench_function(
-            BenchmarkId::new("random_polynomial_vec", threshold),
+            BenchmarkId::new("random_polynomial_naive", threshold),
             |b| {
                 #[allow(clippy::redundant_closure)]
-                b.iter(|| vec())
+                b.iter(|| naive())
             },
         );
     }

@@ -95,14 +95,21 @@ jobs:
       - uses: actions/cache@v3
         continue-on-error: false
         with:
+          # Not caching ~/.cargo/bin/ because it breaks `cargo install critcmp` in `boa-dev/criterion-compare-action@v3`
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Run benchmarks
+        uses: boa-dev/criterion-compare-action@v3
+        if: github.event_name == 'pull_request'
+        with:
+          cwd: ${{ matrix.component }}
+          branchName: ${{ github.base_ref }}
 
       # The next steps have been adapted from https://raw.githubusercontent.com/unicode-org/icu4x/main/.github/workflows/build-test.yml
 
@@ -116,8 +123,8 @@ jobs:
           mkdir -p $OUTPUT_PATH;
           touch $OUTPUT_PATH/output.txt;
           # Currently fails to extract benchmark information https://github.com/rhysd/github-action-benchmark/issues/39
-          # That's why '::' is replaced with ' '
-          cargo bench --bench ${{ matrix.component }} -- --output-format bencher | sed 's/::/__/' | tee $OUTPUT_PATH/output.txt;
+          # Thats why '::' is replaced with ' '
+          cargo bench -- --output-format bencher | sed 's/::/__/' | tee $OUTPUT_PATH/output.txt;
           echo "Saved output to $OUTPUT_PATH/output.txt";
           popd
 

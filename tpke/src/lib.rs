@@ -439,7 +439,7 @@ mod tests {
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
-        let (pubkey, _privkey, contexts) =
+        let (pubkey, _, contexts) =
             setup_fast::<E>(threshold, shares_num, &mut rng);
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 

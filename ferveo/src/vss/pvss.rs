@@ -72,13 +72,15 @@ impl<E: PairingEngine, T> PubliclyVerifiableSS<E, T> {
         );
         phi.coeffs[0] = *s;
         let evals = phi.evaluate_over_domain_by_ref(dkg.domain);
-        // commitment to coeffs
+        // commitment to coeffs, F_i
         let coeffs = fast_multiexp(&phi.coeffs, dkg.pvss_params.g);
         let shares = dkg
             .validators
             .iter()
             .map(|val| {
+                // ek_{i}^{eval_i}, i = validator index
                 fast_multiexp(
+                    // &evals.evals[i..i] = &evals.evals[i]
                     &evals.evals[val.share_start..val.share_end],
                     val.validator.public_key.encryption_key.into_projective(),
                 )
@@ -144,6 +146,9 @@ impl<E: PairingEngine, T> PubliclyVerifiableSS<E, T> {
                     a += a_i.mul(powers_of_alpha.into_repr());
                     powers_of_alpha *= alpha;
                 }
+                // Y = \sum_i y_i \alpha^i
+                // A = \sum_i a_i \alpha^i
+                // e(G,Y) = e(A, ek)
                 E::pairing(dkg.pvss_params.g, y) == E::pairing(a, ek)
             },
         )
