@@ -304,7 +304,7 @@ pub fn bench_recover_share_at_point(c: &mut Criterion) {
     // Set up test conditions
     let rng = &mut StdRng::seed_from_u64(0);
     let msg_size = MSG_SIZE_CASES[0];
-    
+
     for &shares_num in NUM_SHARES_CASES.iter() {
         let mut setup = SetupSimple::new(shares_num, msg_size, rng);
         let threshold = shares_num * 2 / 3;
@@ -321,7 +321,7 @@ pub fn bench_recover_share_at_point(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("Recover Share at Point", shares_num),
             &shares_num,
-            |b, &shares_num| {
+            |b, &_shares_num| {
                 let mut rng = rand::rngs::StdRng::seed_from_u64(0);
                 b.iter(|| {
                     black_box(recover_share_at_point::<E>(
@@ -336,7 +336,31 @@ pub fn bench_recover_share_at_point(c: &mut Criterion) {
     }
 }
 
+pub fn bench_refresh_shares(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Refresh Shares Benchmark");
+    // Set up test conditions
+    let rng = &mut StdRng::seed_from_u64(0);
+    let msg_size = MSG_SIZE_CASES[0];
 
+    for &shares_num in NUM_SHARES_CASES.iter() {
+        let mut setup = SetupSimple::new(shares_num, msg_size, rng);
+        let threshold = shares_num * 2 / 3;
+        group.bench_with_input(
+            BenchmarkId::new("Refresh Shares", shares_num),
+            &shares_num,
+            |b, &_shares_num| {
+                let mut rng = rand::rngs::StdRng::seed_from_u64(0);
+                b.iter(|| {
+                    black_box(refresh_shares::<E>(
+                        &mut setup.contexts,
+                        threshold,
+                        &mut rng,
+                    ));
+                });
+            },
+        );
+    }
+}
 
 criterion_group!(
     benches,
@@ -345,6 +369,7 @@ criterion_group!(
     bench_share_combine,
     bench_share_encrypt_decrypt,
     bench_recover_share_at_point,
+    bench_refresh_shares,
 );
 
 criterion_main!(benches);
