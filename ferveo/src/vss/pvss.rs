@@ -128,6 +128,8 @@ impl<E: PairingEngine, T> PubliclyVerifiableSS<E, T> {
 
     /// Part of checking the validity of an aggregated PVSS transcript
     ///
+    /// Implements check #4 in 4.2.3 section of https://eprint.iacr.org/2022/898.pdf
+    ///
     /// If aggregation fails, a validator needs to know that their pvss
     /// transcript was at fault so that the can issue a new one. This
     /// function may also be used for that purpose.
@@ -146,7 +148,7 @@ impl<E: PairingEngine, T> PubliclyVerifiableSS<E, T> {
                 // See #3 in 4.2.3 section of https://eprint.iacr.org/2022/898.pdf
 
                 // Validator checks checks aggregated shares against commitment
-                let ek = validator
+                let ek_i = validator
                     .validator
                     .public_key
                     .encryption_key
@@ -157,7 +159,7 @@ impl<E: PairingEngine, T> PubliclyVerifiableSS<E, T> {
                 // Y = \sum_i y_i \alpha^i
                 // A = \sum_i a_i \alpha^i
                 // e(G,Y) = e(A, ek)
-                E::pairing(dkg.pvss_params.g, *y_i) == E::pairing(a_i, ek)
+                E::pairing(dkg.pvss_params.g, *y_i) == E::pairing(a_i, ek_i)
             })
     }
 }
