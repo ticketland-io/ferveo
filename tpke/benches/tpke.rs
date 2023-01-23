@@ -345,6 +345,7 @@ criterion_group!(
     bench_share_prepare,
     bench_share_combine,
     bench_share_encrypt_decrypt,
+    bench_validity_checks,
 );
 
 criterion_main!(benches);
