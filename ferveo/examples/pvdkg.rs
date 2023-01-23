@@ -1,6 +1,6 @@
 pub use ark_bls12_381::Bls12_381 as EllipticCurve;
 use ferveo::*;
-use ferveo_common::{TendermintValidator, ValidatorSet};
+use ferveo_common::ExternalValidator;
 use measure_time::print_time;
 
 pub fn main() {
@@ -21,36 +21,33 @@ pub fn gen_keypairs(num: u64) -> Vec<ferveo_common::Keypair<EllipticCurve>> {
 /// Generate a few validators
 pub fn gen_validators(
     keypairs: &[ferveo_common::Keypair<EllipticCurve>],
-) -> ValidatorSet<EllipticCurve> {
-    ValidatorSet::new(
-        (0..keypairs.len())
-            .map(|i| TendermintValidator {
-                power: i as u64,
-                address: format!("validator_{}", i),
-                public_key: keypairs[i].public(),
-            })
-            .collect(),
-    )
+) -> Vec<ExternalValidator<EllipticCurve>> {
+    (0..keypairs.len())
+        .map(|i| ExternalValidator {
+            address: format!("validator_{}", i),
+            public_key: keypairs[i].public(),
+        })
+        .collect()
 }
 
 /// Create a test dkg in state [`DkgState::Init`]
 pub fn setup_dkg(
     validator: usize,
     num: u64,
-    shares: u32,
+    shares_num: u32,
 ) -> PubliclyVerifiableDkg<EllipticCurve> {
     let keypairs = gen_keypairs(num);
     let validators = gen_validators(&keypairs);
-    let me = validators.validators[validator].clone();
+    let me = validators[validator].clone();
     PubliclyVerifiableDkg::new(
         validators,
         Params {
             tau: 0,
-            security_threshold: shares / 3,
-            total_weight: shares,
+            security_threshold: shares_num / 3,
+            shares_num,
             retry_after: 1,
         },
-        me,
+        &me,
         keypairs[validator],
     )
     .expect("Setup failed")
@@ -71,7 +68,7 @@ pub fn setup_dealt_dkg(num: u64, shares: u32) {
     for (sender, pvss) in transcripts.into_iter().rev().enumerate() {
         if let Message::Deal(ss) = pvss.clone() {
             print_time!("PVSS verify pvdkg");
-            ss.verify_full(&dkg, rng);
+            ss.verify_full(&dkg);
         }
         dkg.apply_message(
             dkg.validators[num as usize - 1 - sender].validator.clone(),

@@ -110,7 +110,8 @@ impl SetupSimple {
             .collect();
 
         let pub_contexts = contexts[0].clone().public_decryption_contexts;
-        let lagrange = prepare_combine_simple::<E>(&pub_contexts);
+        let domain: Vec<Fr> = pub_contexts.iter().map(|c| c.domain).collect();
+        let lagrange = prepare_combine_simple::<E>(&domain);
 
         let shared_secret =
             share_combine_simple::<E>(&decryption_shares, &lagrange);
@@ -203,7 +204,9 @@ pub fn bench_share_prepare(c: &mut Criterion) {
         };
         let simple = {
             let setup = SetupSimple::new(shares_num, msg_size, rng);
-            move || black_box(prepare_combine_simple(&setup.pub_contexts))
+            let domain: Vec<Fr> =
+                setup.pub_contexts.iter().map(|c| c.domain).collect();
+            move || black_box(prepare_combine_simple::<E>(&domain))
         };
 
         group.bench_function(

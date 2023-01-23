@@ -41,3 +41,24 @@ pub struct DecryptionShareSimple<E: PairingEngine> {
     pub decrypter_index: usize,
     pub decryption_share: E::Fqk,
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+
+    type E = ark_bls12_381::Bls12_381;
+
+    #[test]
+    fn decryption_share_serialization() {
+        let decryption_share = DecryptionShareFast::<E> {
+            decrypter_index: 1,
+            decryption_share: ark_bls12_381::G1Affine::prime_subgroup_generator(
+            ),
+        };
+
+        let serialized = decryption_share.to_bytes();
+        let deserialized: DecryptionShareFast<E> =
+            DecryptionShareFast::from_bytes(&serialized);
+        assert_eq!(serialized, deserialized.to_bytes())
+    }
+}

@@ -1,5 +1,7 @@
 //! Contains the public API of the library.
 
+#![allow(dead_code)]
+
 // TODO: Refactor this module to deduplicate shared code from tpke-wasm and tpke-wasm.
 
 use std::convert::TryInto;

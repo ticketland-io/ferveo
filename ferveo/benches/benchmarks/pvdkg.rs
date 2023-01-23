@@ -1,6 +1,6 @@
 pub use ark_bls12_381::Bls12_381 as EllipticCurve;
 use criterion::{criterion_group, criterion_main, Criterion};
-use ferveo_common::{TendermintValidator, ValidatorSet};
+use ferveo_common::ExternalValidator;
 use pprof::criterion::{Output, PProfProfiler};
 
 use ferveo::*;
@@ -47,16 +47,13 @@ pub fn gen_keypairs(num: u64) -> Vec<ferveo_common::Keypair<EllipticCurve>> {
 /// Generate a few validators
 pub fn gen_validators(
     keypairs: &[ferveo_common::Keypair<EllipticCurve>],
-) -> ValidatorSet<EllipticCurve> {
-    ValidatorSet::new(
-        (0..keypairs.len())
-            .map(|i| TendermintValidator {
-                power: i as u64,
-                address: format!("validator_{}", i),
-                public_key: keypairs[i].public(),
-            })
-            .collect(),
-    )
+) -> Vec<ExternalValidator<EllipticCurve>> {
+    (0..keypairs.len())
+        .map(|i| ExternalValidator {
+            address: format!("validator_{}", i),
+            public_key: keypairs[i].public(),
+        })
+        .collect()
 }
 
 /// Create a test dkg in state [`DkgState::Init`]
@@ -66,16 +63,17 @@ pub fn setup_dkg(
 ) -> PubliclyVerifiableDkg<EllipticCurve> {
     let keypairs = gen_keypairs(num);
     let validators = gen_validators(&keypairs);
-    let me = validators.validators[validator].clone();
+    let me = validators[validator].clone();
+    let shares_num = 300;
     PubliclyVerifiableDkg::new(
         validators,
         Params {
             tau: 0,
-            security_threshold: 300 / 3,
-            total_weight: 300,
+            security_threshold: shares_num / 3,
+            shares_num,
             retry_after: 2,
         },
-        me,
+        &me,
         keypairs[validator],
     )
     .expect("Setup failed")
