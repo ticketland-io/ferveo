@@ -42,6 +42,35 @@ impl<E: PairingEngine> DecryptionShareFast<E> {
 pub struct DecryptionShareSimple<E: PairingEngine> {
     pub decrypter_index: usize,
     pub decryption_share: E::Fqk,
+    pub validator_checksum: E::G1Affine,
+}
+
+impl<E: PairingEngine> DecryptionShareSimple<E> {
+    // TODO: Use public context (validators public state) instead of passing `validator_public_key`
+    //  and `h` separately
+    pub fn verify(
+        &self,
+        share_aggregate: &E::G2Affine,
+        validator_public_key: &E::G2Affine,
+        h: &E::G2Projective,
+        ciphertext: &Ciphertext<E>,
+    ) -> bool {
+        // D_i == e(C_i, Y_i)
+        if self.decryption_share
+            != E::pairing(self.validator_checksum, *share_aggregate)
+        {
+            return false;
+        }
+
+        // e(C_i, ek_i) == e(U, H)
+        if E::pairing(self.validator_checksum, *validator_public_key)
+            != E::pairing(ciphertext.commitment, *h)
+        {
+            return false;
+        }
+
+        true
+    }
 }
 
 // TODO: Benchmark this against simplified implementation

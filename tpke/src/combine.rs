@@ -101,7 +101,6 @@ pub fn checked_share_combine_fast<E: PairingEngine>(
     Ok(share_combine_fast(decryption_shares, prepared_key_shares))
 }
 
-// TODO: Hide this from external users. Currently blocked by usage in benchmarks.
 pub fn share_combine_simple<E: PairingEngine>(
     decryption_shares: &[DecryptionShareSimple<E>],
     lagrange_coeffs: &[E::Fr],

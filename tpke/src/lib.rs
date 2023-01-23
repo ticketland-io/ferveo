@@ -15,6 +15,7 @@ use subproductdomain::SubproductDomain;
 
 use rand_core::RngCore;
 use std::usize;
+
 use thiserror::Error;
 
 mod ciphertext;
@@ -239,7 +240,7 @@ pub fn setup_simple<E: PairingEngine>(
             private_key_share: *private,
         };
         let b = E::Fr::rand(rng);
-        let blinded_key_shares = private_key_share.blind(b);
+        let blinded_key_share = private_key_share.blind(b);
         private_contexts.push(PrivateDecryptionContextSimple::<E> {
             index,
             setup_params: SetupParams {
@@ -250,6 +251,7 @@ pub fn setup_simple<E: PairingEngine>(
                 h,
             },
             private_key_share,
+            validator_private_key: b,
             public_decryption_contexts: vec![],
         });
         public_contexts.push(PublicDecryptionContextSimple::<E> {
@@ -257,7 +259,9 @@ pub fn setup_simple<E: PairingEngine>(
             public_key_share: PublicKeyShare::<E> {
                 public_key_share: *public,
             },
-            blinded_key_share: blinded_key_shares,
+            blinded_key_share,
+            h,
+            validator_public_key: h.mul(b),
         });
     }
     for private in private_contexts.iter_mut() {
@@ -277,12 +281,16 @@ pub fn generate_random<R: RngCore, E: PairingEngine>(
 #[cfg(test)]
 mod tests {
     use crate::*;
-    use ark_bls12_381::Fr;
+    use ark_bls12_381::{Fr, G1Affine};
+    use std::ops::Mul;
+
     use ark_ec::ProjectiveCurve;
+    use ark_ff::BigInteger256;
     use ark_std::test_rng;
     use rand::prelude::StdRng;
 
     type E = ark_bls12_381::Bls12_381;
+    type Fqk = <ark_bls12_381::Bls12_381 as ark_ec::PairingEngine>::Fqk;
 
     #[test]
     fn ciphertext_serialization() {
@@ -457,10 +465,8 @@ mod tests {
         let (pubkey, _, contexts) =
             setup_simple::<E>(threshold, shares_num, &mut rng);
 
-        // Ciphertext.commitment is already computed to match U
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
-        // Create decryption shares
         let decryption_shares: Vec<_> = contexts
             .iter()
             .map(|c| c.create_share(&ciphertext, aad).unwrap())
@@ -476,6 +482,76 @@ mod tests {
             share_combine_simple::<E>(&decryption_shares, &lagrange);
 
         test_ciphertext_validation_fails(msg, aad, &ciphertext, &shared_secret);
+    }
+
+    #[test]
+    fn simple_threshold_decryption_share_verification() {
+        let mut rng = &mut test_rng();
+        let shares_num = 16;
+        let threshold = shares_num * 2 / 3;
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
+
+        let (pubkey, _, contexts) =
+            setup_simple::<E>(threshold, shares_num, &mut rng);
+
+        let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
+
+        let decryption_shares: Vec<_> = contexts
+            .iter()
+            .map(|c| c.create_share(&ciphertext, aad).unwrap())
+            .collect();
+
+        // In simple tDec variant, we verify decryption shares only after decryption fails.
+        // We could do that before, but we prefer to optimize for the happy path.
+
+        // Let's assume that combination failed here. We'll try to verify decryption shares
+        // against validator checksums.
+
+        // There is no share aggregation in current version of tpke (it's mocked).
+        // ShareEncryptions are called BlindedKeyShares.
+
+        let pub_contexts = &contexts[0].public_decryption_contexts;
+        let blinded_key_shares = &pub_contexts
+            .iter()
+            .map(|c| &c.blinded_key_share.blinded_key_share)
+            .collect::<Vec<_>>();
+        izip!(&decryption_shares, blinded_key_shares, pub_contexts).for_each(
+            |(decryption_share, y_i, pub_context)| {
+                assert!(decryption_share.verify(
+                    y_i,
+                    &pub_context.validator_public_key.into_affine(),
+                    &pub_context.h.into_projective(),
+                    &ciphertext,
+                ));
+            },
+        );
+
+        // Now, let's test that verification fails if we one of the decryption shares is invalid.
+
+        let mut has_bad_checksum = decryption_shares[0].clone();
+        has_bad_checksum.validator_checksum = has_bad_checksum
+            .validator_checksum
+            .mul(BigInteger256::rand(rng))
+            .into_affine();
+
+        assert!(!has_bad_checksum.verify(
+            &pub_contexts[0].blinded_key_share.blinded_key_share,
+            &pub_contexts[0].validator_public_key.into_affine(),
+            &pub_contexts[0].h.into_projective(),
+            &ciphertext,
+        ));
+
+        let mut has_bad_share = decryption_shares[0].clone();
+        has_bad_share.decryption_share =
+            has_bad_share.decryption_share.mul(Fqk::rand(rng));
+
+        assert!(!has_bad_share.verify(
+            &pub_contexts[0].blinded_key_share.blinded_key_share,
+            &pub_contexts[0].validator_public_key.into_affine(),
+            &pub_contexts[0].h.into_projective(),
+            &ciphertext,
+        ));
     }
 
     #[test]
@@ -601,6 +677,8 @@ mod tests {
                 &recovered_key_share,
                 &ciphertext,
             ),
+            // TODO: Implement a method to make a proper decryption share after refreshing
+            validator_checksum: G1Affine::zero(),
         });
 
         // Creating a shared secret from remaining shares and the recovered one
@@ -650,6 +728,8 @@ mod tests {
                 DecryptionShareSimple {
                     decrypter_index,
                     decryption_share,
+                    // TODO: Implement a method to make a proper decryption share after refreshing
+                    validator_checksum: G1Affine::zero(),
                 }
             })
             .collect();

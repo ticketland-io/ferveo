@@ -41,6 +41,7 @@ mod test_dkg_full {
     use crate::dkg::pv::test_common::*;
     use ark_bls12_381::{Bls12_381 as EllipticCurve, Bls12_381, G2Projective};
     use ark_ec::bls12::G2Affine;
+    use ark_ec::group::Group;
     use ark_ff::{Fp12, UniformRand};
     use ferveo_common::{ExternalValidator, Keypair};
     use group_threshold_cryptography as tpke;
@@ -60,13 +61,16 @@ mod test_dkg_full {
 
         let ciphertext = tpke::encrypt::<_, E>(msg, aad, &public_key, rng);
 
-        let aggregate = aggregate_for_decryption(&dkg);
+        let share_aggregate = aggregate_for_decryption(&dkg);
         // Aggregate contains only one set of shares
-        assert_eq!(aggregate, dkg.vss.get(&0).unwrap().shares);
+        assert_eq!(share_aggregate, dkg.vss.get(&0).unwrap().shares);
 
         let validator_keypairs = gen_n_keypairs(1);
-        let decryption_shares =
-            make_decryption_shares(&ciphertext, validator_keypairs, aggregate);
+        let decryption_shares = make_decryption_shares(
+            &ciphertext,
+            &validator_keypairs,
+            &share_aggregate,
+        );
 
         let shares_x = &dkg
             .domain
@@ -99,7 +103,7 @@ mod test_dkg_full {
         let public_key = dkg.final_key();
         let ciphertext = tpke::encrypt::<_, E>(msg, aad, &public_key, rng);
 
-        let aggregate = aggregate_for_decryption(&dkg);
+        let share_aggregate = aggregate_for_decryption(&dkg);
 
         // TODO: Before creating decryption shares, check ciphertext validity
         // See: https://nikkolasg.github.io/ferveo/tpke.html#to-validate-ciphertext-for-ind-cca2-security
@@ -112,13 +116,16 @@ mod test_dkg_full {
             .for_each(|(v, k)| {
                 assert_eq!(v.validator.public_key, k.public());
             });
-        let decryption_shares =
-            make_decryption_shares(&ciphertext, validator_keypairs, aggregate);
+        let decryption_shares = make_decryption_shares(
+            &ciphertext,
+            &validator_keypairs,
+            &share_aggregate,
+        );
 
         let shares_x = &dkg
             .domain
             .elements()
-            .take(decryption_shares.len())
+            .take(decryption_shares.len()) // TODO: Assert length instead?
             .collect::<Vec<_>>();
         let lagrange_coeffs = tpke::prepare_combine_simple::<E>(shares_x);
 
@@ -127,6 +134,8 @@ mod test_dkg_full {
             &lagrange_coeffs,
         );
 
+        // Combination works, let's decrypt
+
         let plaintext = tpke::checked_decrypt_with_shared_secret(
             &ciphertext,
             aad,
@@ -134,5 +143,16 @@ mod test_dkg_full {
         )
         .unwrap();
         assert_eq!(plaintext, msg);
+
+        izip!(decryption_shares, share_aggregate, validator_keypairs).for_each(
+            |(decryption_share, y_i, validator_keypair)| {
+                assert!(decryption_share.verify(
+                    &y_i,
+                    &validator_keypair.public().encryption_key,
+                    &dkg.pvss_params.h,
+                    &ciphertext
+                ));
+            },
+        );
     }
 }

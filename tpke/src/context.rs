@@ -16,6 +16,8 @@ pub struct PublicDecryptionContextSimple<E: PairingEngine> {
     pub domain: E::Fr,
     pub public_key_share: PublicKeyShare<E>,
     pub blinded_key_share: BlindedKeyShare<E>,
+    pub h: E::G2Affine,
+    pub validator_public_key: E::G2Projective,
 }
 
 #[derive(Clone, Debug)]
@@ -62,6 +64,8 @@ pub struct PrivateDecryptionContextSimple<E: PairingEngine> {
     pub setup_params: SetupParams<E>,
     pub private_key_share: PrivateKeyShare<E>,
     pub public_decryption_contexts: Vec<PublicDecryptionContextSimple<E>>,
+    // TODO: Remove/replace with `setup_params.b` after refactoring
+    pub validator_private_key: E::Fr,
 }
 
 impl<E: PairingEngine> PrivateDecryptionContextSimple<E> {
@@ -73,14 +77,22 @@ impl<E: PairingEngine> PrivateDecryptionContextSimple<E> {
     ) -> Result<DecryptionShareSimple<E>> {
         check_ciphertext_validity::<E>(ciphertext, aad)?;
 
-        let u = ciphertext.commitment;
-        let z_i = self.private_key_share.clone();
-        let z_i = z_i.private_key_share;
         // C_i = e(U, Z_i)
-        let c_i = E::pairing(u, z_i);
+        let decryption_share = E::pairing(
+            ciphertext.commitment,
+            self.private_key_share.private_key_share,
+        );
+
+        // C_i = dk_i^{-1} * U
+        let validator_checksum = ciphertext
+            .commitment
+            .mul(self.validator_private_key.inverse().unwrap())
+            .into_affine();
+
         Ok(DecryptionShareSimple {
             decrypter_index: self.index,
-            decryption_share: c_i,
+            decryption_share,
+            validator_checksum,
         })
     }
 }

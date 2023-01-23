@@ -12,7 +12,7 @@ use group_threshold_cryptography::{Ciphertext, DecryptionShareSimple};
 use itertools::{zip_eq, Itertools};
 use subproductdomain::fast_multiexp;
 
-/// These are the blinded evaluations of weight shares of a single random polynomial
+/// These are the blinded evaluations of shares of a single random polynomial
 pub type ShareEncryptions<E> = <E as PairingEngine>::G2Affine;
 
 /// Marker struct for unaggregated PVSS transcripts
@@ -257,26 +257,56 @@ pub fn aggregate_for_decryption<E: PairingEngine>(
 
 pub fn make_decryption_shares<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
-    validator_keypairs: Vec<Keypair<E>>,
-    aggregate: Vec<E::G2Affine>,
+    validator_keypairs: &[Keypair<E>],
+    aggregate: &[E::G2Affine],
 ) -> Vec<DecryptionShareSimple<E>> {
     aggregate
         .iter()
         .zip_eq(validator_keypairs.iter())
-        .map(|(encrypted_share, keypair)| {
+        .enumerate()
+        .map(|(decrypter_index, (encrypted_share, keypair))| {
             // Decrypt private key shares https://nikkolasg.github.io/ferveo/pvss.html#validator-decryption-of-private-key-shares
             let z_i = encrypted_share
                 .mul(keypair.decryption_key.inverse().unwrap().into_repr());
-            let u = ciphertext.commitment;
-            E::pairing(u, z_i)
-        })
-        .enumerate()
-        .map(
-            |(decrypter_index, decryption_share)| DecryptionShareSimple {
-                decrypter_index,
+
+            // C_i = e(U, Z_i)
+            let decryption_share = E::pairing(ciphertext.commitment, z_i);
+
+            // C_i = dk_i^{-1} * U
+            let validator_checksum = ciphertext
+                .commitment
+                .mul(keypair.decryption_key.inverse().unwrap().into_repr())
+                .into_affine();
+
+            DecryptionShareSimple {
                 decryption_share,
-            },
-        )
+                validator_checksum,
+                decrypter_index,
+            }
+        })
+        .collect::<Vec<_>>()
+}
+
+// TODO: Integrate into DKG dealing process or PVSS transcript struct?
+pub fn make_validator_checksum<E: PairingEngine>(
+    ciphertext: &Ciphertext<E>,
+    validator_keypairs: &[Keypair<E>],
+) -> Vec<E::G1Affine> {
+    validator_keypairs
+        .iter()
+        .map(|validator_keypair| {
+            // C_i = dk_i^{-1} * U
+            ciphertext
+                .commitment
+                .mul(
+                    validator_keypair
+                        .decryption_key
+                        .inverse()
+                        .unwrap()
+                        .into_repr(),
+                )
+                .into_affine()
+        })
         .collect::<Vec<_>>()
 }
 
