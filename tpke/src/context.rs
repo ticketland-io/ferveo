@@ -147,10 +147,11 @@ impl<E: PairingEngine> PrivateDecryptionContextSimple<E> {
         lagrange_coeff: &E::Fr,
     ) -> DecryptionShareSimplePrecomputed<E> {
         let u = ciphertext.commitment;
+        // U_{λ_i} = [λ_{i}(0)] U
         let u_to_lagrange_coeff = u.mul(lagrange_coeff.into_repr());
         let z_i = self.private_key_share.clone();
         let z_i = z_i.private_key_share;
-        // $C_{λ_i}=e(U_{λ_i},Z_i)$, where $U_{λ_i} = [λ_{i}(0)]U$$
+        // C_{λ_i} = e(U_{λ_i}, Z_i)
         let c_i = E::pairing(u_to_lagrange_coeff, z_i);
         DecryptionShareSimplePrecomputed {
             decrypter_index: self.index,

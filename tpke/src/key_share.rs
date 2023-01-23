@@ -11,10 +11,8 @@ pub struct PublicKeyShare<E: PairingEngine> {
 
 #[derive(Debug, Clone)]
 pub struct BlindedKeyShare<E: PairingEngine> {
-    pub blinding_key: E::G2Affine,
-    // [b] H
-    pub blinded_key_share: E::G2Affine,
-    // [b] Z_{i, \omega_i}
+    pub blinding_key: E::G2Affine,      // [b] H
+    pub blinded_key_share: E::G2Affine, // [b] Z_{i, \omega_i}
     pub blinding_key_prepared: E::G2Prepared,
 }
 

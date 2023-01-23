@@ -57,9 +57,6 @@ impl SetupFast {
         let prepared_key_shares =
             prepare_combine_fast(&pub_contexts, &decryption_shares);
 
-        let _shared_secret =
-            share_combine_fast(&decryption_shares, &prepared_key_shares);
-
         let shared_secret =
             share_combine_fast(&decryption_shares, &prepared_key_shares);
 
@@ -203,10 +200,7 @@ pub fn bench_create_decryption_share(c: &mut Criterion) {
         );
         group.bench_function(
             BenchmarkId::new("share_create_simple_precomputed", shares_num),
-            |b| {
-                #[allow(clippy::redundant_closure)]
-                b.iter(|| simple_precomputed())
-            },
+            |b| b.iter(|| simple_precomputed()),
         );
     }
 }
@@ -305,10 +299,7 @@ pub fn bench_share_combine(c: &mut Criterion) {
         );
         group.bench_function(
             BenchmarkId::new("share_combine_simple_precomputed", shares_num),
-            |b| {
-                #[allow(clippy::redundant_closure)]
-                b.iter(|| simple_precomputed())
-            },
+            |b| b.iter(|| simple_precomputed()),
         );
     }
 }
