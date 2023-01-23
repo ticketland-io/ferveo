@@ -324,12 +324,13 @@ pub fn bench_recover_share_at_point(c: &mut Criterion) {
             |b, &_shares_num| {
                 let mut rng = rand::rngs::StdRng::seed_from_u64(0);
                 b.iter(|| {
-                    black_box(recover_share_at_point::<E>(
-                        &remaining_participants[..shares_num],
-                        threshold,
-                        &x_r,
-                        &mut rng,
-                    ));
+                    black_box(
+                        let _ = recover_share_at_point::<E>(
+                            &remaining_participants[..shares_num],
+                            threshold,
+                            &x_r,
+                            &mut rng);
+                    );
                 });
             },
         );
