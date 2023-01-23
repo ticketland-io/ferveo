@@ -307,7 +307,7 @@ pub fn bench_recover_share_at_point(c: &mut Criterion) {
 
     for &shares_num in NUM_SHARES_CASES.iter() {
         let mut setup = SetupSimple::new(shares_num, msg_size, rng);
-        let threshold = shares_num * 2 / 3;
+        let threshold = setup.shared.threshold;
         let selected_participant = setup.contexts.pop().unwrap();
         let x_r = selected_participant
             .public_decryption_contexts
@@ -321,16 +321,15 @@ pub fn bench_recover_share_at_point(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("Recover Share at Point", shares_num),
             &shares_num,
-            |b, &_shares_num| {
+            |b, _| {
                 let mut rng = rand::rngs::StdRng::seed_from_u64(0);
                 b.iter(|| {
-                    black_box(
-                        let _ = recover_share_at_point::<E>(
-                            &remaining_participants[..shares_num],
-                            threshold,
-                            &x_r,
-                            &mut rng);
-                    );
+                    let _ = black_box(recover_share_at_point::<E>(
+                        &remaining_participants[..shares_num],
+                        threshold,
+                        &x_r,
+                        &mut rng,
+                    ));
                 });
             },
         );
@@ -345,11 +344,11 @@ pub fn bench_refresh_shares(c: &mut Criterion) {
 
     for &shares_num in NUM_SHARES_CASES.iter() {
         let mut setup = SetupSimple::new(shares_num, msg_size, rng);
-        let threshold = shares_num * 2 / 3;
+        let threshold = setup.shared.threshold;
         group.bench_with_input(
             BenchmarkId::new("Refresh Shares", shares_num),
             &shares_num,
-            |b, &_shares_num| {
+            |b, _| {
                 let mut rng = rand::rngs::StdRng::seed_from_u64(0);
                 b.iter(|| {
                     black_box(refresh_shares::<E>(
