@@ -8,7 +8,9 @@ use ark_ec::PairingEngine;
 use ark_ff::UniformRand;
 use ark_serialize::*;
 use ferveo_common::{Keypair, PublicKey};
-use group_threshold_cryptography::{Ciphertext, DecryptionShareSimple};
+use group_threshold_cryptography::{
+    Ciphertext, DecryptionShareSimple, PrivateKeyShare,
+};
 use itertools::{zip_eq, Itertools};
 use subproductdomain::fast_multiexp;
 
@@ -259,7 +261,9 @@ pub fn make_decryption_shares<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     validator_keypairs: &[Keypair<E>],
     aggregate: &[E::G2Affine],
+    aad: &[u8],
 ) -> Vec<DecryptionShareSimple<E>> {
+    // TODO: Calculate separately for each validator
     aggregate
         .iter()
         .zip_eq(validator_keypairs.iter())
@@ -268,44 +272,19 @@ pub fn make_decryption_shares<E: PairingEngine>(
             // Decrypt private key shares https://nikkolasg.github.io/ferveo/pvss.html#validator-decryption-of-private-key-shares
             let z_i = encrypted_share
                 .mul(keypair.decryption_key.inverse().unwrap().into_repr());
+            // TODO: Consider using "container" structs from `tpke` for other primitives
+            let private_key_share = PrivateKeyShare {
+                private_key_share: z_i.into_affine(),
+            };
 
-            // C_i = e(U, Z_i)
-            let decryption_share = E::pairing(ciphertext.commitment, z_i);
-
-            // C_i = dk_i^{-1} * U
-            let validator_checksum = ciphertext
-                .commitment
-                .mul(keypair.decryption_key.inverse().unwrap().into_repr())
-                .into_affine();
-
-            DecryptionShareSimple {
-                decryption_share,
-                validator_checksum,
+            DecryptionShareSimple::create(
                 decrypter_index,
-            }
-        })
-        .collect::<Vec<_>>()
-}
-
-// TODO: Integrate into DKG dealing process or PVSS transcript struct?
-pub fn make_validator_checksum<E: PairingEngine>(
-    ciphertext: &Ciphertext<E>,
-    validator_keypairs: &[Keypair<E>],
-) -> Vec<E::G1Affine> {
-    validator_keypairs
-        .iter()
-        .map(|validator_keypair| {
-            // C_i = dk_i^{-1} * U
-            ciphertext
-                .commitment
-                .mul(
-                    validator_keypair
-                        .decryption_key
-                        .inverse()
-                        .unwrap()
-                        .into_repr(),
-                )
-                .into_affine()
+                &keypair.decryption_key,
+                &private_key_share,
+                ciphertext,
+                aad,
+            )
+            .unwrap() // Unwrapping here only because this is a test method!
         })
         .collect::<Vec<_>>()
 }

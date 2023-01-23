@@ -70,6 +70,7 @@ mod test_dkg_full {
             &ciphertext,
             &validator_keypairs,
             &share_aggregate,
+            aad,
         );
 
         let shares_x = &dkg
@@ -120,6 +121,7 @@ mod test_dkg_full {
             &ciphertext,
             &validator_keypairs,
             &share_aggregate,
+            aad,
         );
 
         let shares_x = &dkg
@@ -144,6 +146,7 @@ mod test_dkg_full {
         .unwrap();
         assert_eq!(plaintext, msg);
 
+        // Testing green-path decryption share verification
         izip!(decryption_shares, share_aggregate, validator_keypairs).for_each(
             |(decryption_share, y_i, validator_keypair)| {
                 assert!(decryption_share.verify(

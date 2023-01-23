@@ -40,12 +40,41 @@ impl<E: PairingEngine> DecryptionShareFast<E> {
 
 #[derive(Debug, Clone)]
 pub struct DecryptionShareSimple<E: PairingEngine> {
+    // TODO: Rename to share_index?
     pub decrypter_index: usize,
     pub decryption_share: E::Fqk,
     pub validator_checksum: E::G1Affine,
 }
 
 impl<E: PairingEngine> DecryptionShareSimple<E> {
+    pub fn create(
+        validator_index: usize,
+        validator_private_key: &E::Fr,
+        private_key_share: &PrivateKeyShare<E>,
+        ciphertext: &Ciphertext<E>,
+        aad: &[u8],
+    ) -> Result<DecryptionShareSimple<E>> {
+        check_ciphertext_validity::<E>(ciphertext, aad)?;
+
+        // C_i = e(U, Z_i)
+        let decryption_share = E::pairing(
+            ciphertext.commitment,
+            private_key_share.private_key_share,
+        );
+
+        // C_i = dk_i^{-1} * U
+        let validator_checksum = ciphertext
+            .commitment
+            .mul(validator_private_key.inverse().unwrap())
+            .into_affine();
+
+        Ok(DecryptionShareSimple {
+            decrypter_index: validator_index,
+            decryption_share,
+            validator_checksum,
+        })
+    }
+
     // TODO: Use public context (validators public state) instead of passing `validator_public_key`
     //  and `h` separately
     pub fn verify(

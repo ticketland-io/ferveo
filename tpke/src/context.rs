@@ -75,24 +75,12 @@ impl<E: PairingEngine> PrivateDecryptionContextSimple<E> {
         ciphertext: &Ciphertext<E>,
         aad: &[u8],
     ) -> Result<DecryptionShareSimple<E>> {
-        check_ciphertext_validity::<E>(ciphertext, aad)?;
-
-        // C_i = e(U, Z_i)
-        let decryption_share = E::pairing(
-            ciphertext.commitment,
-            self.private_key_share.private_key_share,
-        );
-
-        // C_i = dk_i^{-1} * U
-        let validator_checksum = ciphertext
-            .commitment
-            .mul(self.validator_private_key.inverse().unwrap())
-            .into_affine();
-
-        Ok(DecryptionShareSimple {
-            decrypter_index: self.index,
-            decryption_share,
-            validator_checksum,
-        })
+        DecryptionShareSimple::create(
+            self.index,
+            &self.validator_private_key,
+            &self.private_key_share,
+            ciphertext,
+            aad,
+        )
     }
 }
