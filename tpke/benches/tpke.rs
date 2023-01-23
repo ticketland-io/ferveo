@@ -313,6 +313,32 @@ pub fn bench_share_encrypt_decrypt(c: &mut Criterion) {
     }
 }
 
+pub fn bench_validity_checks(c: &mut Criterion) {
+    let mut group = c.benchmark_group("VALIDITY CHECKS");
+    group.sample_size(10);
+
+    let rng = &mut StdRng::seed_from_u64(0);
+    let shares_num = NUM_SHARES_CASES[0];
+
+    for msg_size in MSG_SIZE_CASES {
+        let ciphertext_validity = {
+            let mut rng = rng.clone();
+            let setup = SetupFast::new(shares_num, msg_size, &mut rng);
+            move || {
+                black_box(check_ciphertext_validity(
+                    &setup.shared.ciphertext,
+                    &setup.shared.aad,
+                ))
+                .unwrap();
+            }
+        };
+        group.bench_function(
+            BenchmarkId::new("check_ciphertext_validity", msg_size),
+            |b| b.iter(|| ciphertext_validity()),
+        );
+    }
+}
+
 criterion_group!(
     benches,
     bench_create_decryption_share,
