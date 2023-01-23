@@ -106,9 +106,6 @@ mod test_dkg_full {
 
         let share_aggregate = aggregate_for_decryption(&dkg);
 
-        // TODO: Before creating decryption shares, check ciphertext validity
-        // See: https://nikkolasg.github.io/ferveo/tpke.html#to-validate-ciphertext-for-ind-cca2-security
-
         let validator_keypairs = gen_n_keypairs(4);
         // Make sure validators are in the same order dkg is by comparing their public keys
         dkg.validators

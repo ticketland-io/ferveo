@@ -290,7 +290,7 @@ mod tests {
     use rand::prelude::StdRng;
 
     type E = ark_bls12_381::Bls12_381;
-    type Fqk = <ark_bls12_381::Bls12_381 as ark_ec::PairingEngine>::Fqk;
+    type Fqk = <ark_bls12_381::Bls12_381 as PairingEngine>::Fqk;
 
     #[test]
     fn ciphertext_serialization() {
@@ -512,20 +512,11 @@ mod tests {
         // ShareEncryptions are called BlindedKeyShares.
 
         let pub_contexts = &contexts[0].public_decryption_contexts;
-        let blinded_key_shares = &pub_contexts
-            .iter()
-            .map(|c| &c.blinded_key_share.blinded_key_share)
-            .collect::<Vec<_>>();
-        izip!(&decryption_shares, blinded_key_shares, pub_contexts).for_each(
-            |(decryption_share, y_i, pub_context)| {
-                assert!(decryption_share.verify(
-                    y_i,
-                    &pub_context.validator_public_key.into_affine(),
-                    &pub_context.h.into_projective(),
-                    &ciphertext,
-                ));
-            },
-        );
+        assert!(verify_decryption_shares_simple(
+            pub_contexts,
+            &ciphertext,
+            &decryption_shares
+        ));
 
         // Now, let's test that verification fails if we one of the decryption shares is invalid.
 

@@ -1,6 +1,3 @@
-#![allow(non_snake_case)]
-#![allow(dead_code)]
-
 use crate::*;
 use ark_ec::ProjectiveCurve;
 use itertools::zip_eq;
@@ -24,11 +21,11 @@ impl<E: PairingEngine> DecryptionShareFast<E> {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        let INDEX_BYTE_LEN = 8;
+        let index_byte_len = 8;
         let decrypter_index =
-            bincode::deserialize(&bytes[0..INDEX_BYTE_LEN]).unwrap();
+            bincode::deserialize(&bytes[0..index_byte_len]).unwrap();
         let decryption_share =
-            CanonicalDeserialize::deserialize(&bytes[INDEX_BYTE_LEN..])
+            CanonicalDeserialize::deserialize(&bytes[index_byte_len..])
                 .unwrap();
 
         DecryptionShareFast {
@@ -102,11 +99,10 @@ impl<E: PairingEngine> DecryptionShareSimple<E> {
     }
 }
 
-// TODO: Benchmark this against simplified implementation
 // TODO: Remove this code? Currently unused.
 pub fn batch_verify_decryption_shares<R: RngCore, E: PairingEngine>(
     pub_contexts: &[PublicDecryptionContextFast<E>],
-    ciphertexts: &[&Ciphertext<E>],
+    ciphertexts: &[Ciphertext<E>],
     decryption_shares: &[Vec<DecryptionShareFast<E>>],
     rng: &mut R,
 ) -> bool {
@@ -167,7 +163,6 @@ pub fn batch_verify_decryption_shares<R: RngCore, E: PairingEngine>(
     E::product_of_pairings(&pairings) == E::Fqk::one()
 }
 
-// TODO: Benchmark this
 pub fn verify_decryption_shares_fast<E: PairingEngine>(
     pub_contexts: &[PublicDecryptionContextFast<E>],
     ciphertext: &Ciphertext<E>,
@@ -200,6 +195,31 @@ pub fn verify_decryption_shares_fast<E: PairingEngine>(
         }
     }
 
+    true
+}
+
+pub fn verify_decryption_shares_simple<E: PairingEngine>(
+    pub_contexts: &Vec<PublicDecryptionContextSimple<E>>,
+    ciphertext: &Ciphertext<E>,
+    decryption_shares: &Vec<DecryptionShareSimple<E>>,
+) -> bool {
+    let blinded_key_shares = &pub_contexts
+        .iter()
+        .map(|c| &c.blinded_key_share.blinded_key_share)
+        .collect::<Vec<_>>();
+    for (decryption_share, y_i, pub_context) in
+        izip!(decryption_shares, blinded_key_shares, pub_contexts)
+    {
+        let is_valid = decryption_share.verify(
+            y_i,
+            &pub_context.validator_public_key.into_affine(),
+            &pub_context.h.into_projective(),
+            ciphertext,
+        );
+        if !is_valid {
+            return false;
+        }
+    }
     true
 }
 
