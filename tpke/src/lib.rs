@@ -1,5 +1,3 @@
-extern crate core;
-
 use crate::hash_to_curve::htp_bls12381_g2;
 use crate::SetupParams;
 
