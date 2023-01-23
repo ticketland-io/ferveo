@@ -264,23 +264,6 @@ pub fn setup_simple<E: PairingEngine>(
     (pubkey.into(), privkey.into(), private_contexts)
 }
 
-pub fn generate_random<R: RngCore, E: PairingEngine>(
-    n: usize,
-    rng: &mut R,
-) -> Vec<E::Fr> {
-    (0..n).map(|_| E::Fr::rand(rng)).collect::<Vec<_>>()
-}
-
-fn make_decryption_share<E: PairingEngine>(
-    private_share: &PrivateKeyShare<E>,
-    ciphertext: &Ciphertext<E>,
-) -> E::Fqk {
-    let z_i = private_share;
-    let u = ciphertext.commitment;
-    let z_i = z_i.private_key_shares[0];
-    E::pairing(u, z_i)
-}
-
 #[cfg(test)]
 mod tests {
     use crate::*;
@@ -460,9 +443,12 @@ mod tests {
 
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
-        let lagrange_coeffs = prepare_combine_simple::<E>(
-            &contexts[0].public_decryption_contexts,
-        );
+        let domain = contexts[0]
+            .public_decryption_contexts
+            .iter()
+            .map(|c| c.domain)
+            .collect::<Vec<_>>();
+        let lagrange_coeffs = prepare_combine_simple::<E>(&domain);
 
         let decryption_shares: Vec<_> = contexts
             .iter()

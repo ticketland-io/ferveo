@@ -51,11 +51,11 @@ impl<E: PairingEngine> PrivateDecryptionContextFast<E> {
             decryption_share,
         }
     }
+
     pub fn batch_verify_decryption_shares<R: RngCore>(
         &self,
         ciphertexts: &[Ciphertext<E>],
         shares: &[Vec<DecryptionShareFast<E>>],
-        //ciphertexts_and_shares: &[(Ciphertext<E>, Vec<DecryptionShare<E>>)],
         rng: &mut R,
     ) -> bool {
         let num_ciphertexts = ciphertexts.len();
@@ -149,7 +149,7 @@ impl<E: PairingEngine> PrivateDecryptionContextSimple<E> {
         let u = ciphertext.commitment;
         let u_to_lagrange_coeff = u.mul(lagrange_coeff.into_repr());
         let z_i = self.private_key_share.clone();
-        let z_i = z_i.private_key_shares[0];
+        let z_i = z_i.private_key_share;
         // $C_{λ_i}=e(U_{λ_i},Z_i)$, where $U_{λ_i} = [λ_{i}(0)]U$$
         let c_i = E::pairing(u_to_lagrange_coeff, z_i);
         DecryptionShareSimplePrecomputed {
