@@ -1,8 +1,17 @@
 # tpke
 
-## Benchmarking WASM
+## Benchmarks
+
+### Benchmarking WASM
 
 Based on `centurion.rs` (docs)[https://github.com/bheisler/criterion.rs/blob/version-0.4/book/src/user_guide/wasi.md#webasseblywasi-benchmarking]
+
+### Benchmarking primitives size
+
+```sh
+cargo run --example bench_primitives_size
+```
+
 
 ### Setup
 

@@ -208,7 +208,7 @@ pub fn setup_simple<E: PairingEngine>(
     let pubkey_shares =
         subproductdomain::fast_multiexp(&evals.evals, g.into_projective());
     let pubkey_share = g.mul(evals.evals[0]);
-    assert!(pubkey_shares[0] == E::G1Affine::from(pubkey_share));
+    debug_assert!(pubkey_shares[0] == E::G1Affine::from(pubkey_share));
 
     // Y, but only when b = 1 - private key shares of participants
     let privkey_shares =
@@ -221,7 +221,7 @@ pub fn setup_simple<E: PairingEngine>(
     let privkey = h.mul(x);
 
     let secret = threshold_poly.evaluate(&E::Fr::zero());
-    assert_eq!(secret, x);
+    debug_assert!(secret == x);
 
     let mut private_contexts = vec![];
     let mut public_contexts = vec![];
