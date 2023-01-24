@@ -302,12 +302,75 @@ pub fn bench_share_encrypt_decrypt(c: &mut Criterion) {
     }
 }
 
+pub fn bench_recover_share_at_point(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Recover Share at Point Benchmark");
+    // Set up test conditions
+    let rng = &mut StdRng::seed_from_u64(0);
+    let msg_size = MSG_SIZE_CASES[0];
+
+    for &shares_num in NUM_SHARES_CASES.iter() {
+        let mut setup = SetupSimple::new(shares_num, msg_size, rng);
+        let threshold = setup.shared.threshold;
+        let selected_participant = setup.contexts.pop().unwrap();
+        let x_r = selected_participant
+            .public_decryption_contexts
+            .last()
+            .unwrap()
+            .domain;
+        let mut remaining_participants = setup.contexts;
+        for p in &mut remaining_participants {
+            p.public_decryption_contexts.pop();
+        }
+        group.bench_function(
+            BenchmarkId::new("Recover Share at Point", shares_num),
+            |b| {
+                let mut rng = rand::rngs::StdRng::seed_from_u64(0);
+                b.iter(|| {
+                    let _ = black_box(recover_share_at_point::<E>(
+                        &remaining_participants[..shares_num],
+                        threshold,
+                        &x_r,
+                        &mut rng,
+                    ));
+                });
+            },
+        );
+    }
+}
+
+pub fn bench_refresh_shares(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Refresh Shares Benchmark");
+    // Set up test conditions
+    let rng = &mut StdRng::seed_from_u64(0);
+    let msg_size = MSG_SIZE_CASES[0];
+
+    for &shares_num in NUM_SHARES_CASES.iter() {
+        let mut setup = SetupSimple::new(shares_num, msg_size, rng);
+        let threshold = setup.shared.threshold;
+        group.bench_function(
+            BenchmarkId::new("Refresh Shares", shares_num),
+            |b| {
+                let mut rng = rand::rngs::StdRng::seed_from_u64(0);
+                b.iter(|| {
+                    black_box(refresh_shares::<E>(
+                        &mut setup.contexts,
+                        threshold,
+                        &mut rng,
+                    ));
+                });
+            },
+        );
+    }
+}
+
 criterion_group!(
     benches,
     bench_create_decryption_share,
     bench_share_prepare,
     bench_share_combine,
     bench_share_encrypt_decrypt,
+    bench_recover_share_at_point,
+    bench_refresh_shares,
 );
 
 criterion_main!(benches);
