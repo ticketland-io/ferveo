@@ -9,7 +9,7 @@ use ark_ff::UniformRand;
 use ark_serialize::*;
 use ferveo_common::{Keypair, PublicKey};
 use group_threshold_cryptography::{
-    Ciphertext, DecryptionShareSimple, PrivateKeyShare,
+    Ciphertext, DecryptionShareFast, DecryptionShareSimple, PrivateKeyShare,
 };
 use itertools::{zip_eq, Itertools};
 use subproductdomain::fast_multiexp;
@@ -33,6 +33,7 @@ impl Aggregate for Aggregated {}
 
 /// Type alias for non aggregated PVSS transcripts
 pub type Pvss<E> = PubliclyVerifiableSS<E>;
+
 /// Type alias for aggregated PVSS transcripts
 pub type AggregatedPvss<E> = PubliclyVerifiableSS<E, Aggregated>;
 
@@ -166,7 +167,7 @@ impl<E: PairingEngine, T> PubliclyVerifiableSS<E, T> {
     }
 }
 
-/// Extra method available to aggregated PVSS transcripts
+/// Extra methods available to aggregated PVSS transcripts
 impl<E: PairingEngine, T: Aggregate> PubliclyVerifiableSS<E, T> {
     /// Verify that this PVSS instance is a valid aggregation of
     /// the PVSS instances, produced by [`aggregate`],
@@ -195,10 +196,38 @@ impl<E: PairingEngine, T: Aggregate> PubliclyVerifiableSS<E, T> {
             ))
         }
     }
+
+    pub fn make_decryption_share_simple(
+        &self,
+        ciphertext: &Ciphertext<E>,
+        aad: &[u8],
+        validator_decryption_key: &E::Fr,
+        validator_index: usize,
+    ) -> DecryptionShareSimple<E> {
+        // Decrypt private key shares https://nikkolasg.github.io/ferveo/pvss.html#validator-decryption-of-private-key-shares
+        let private_key_share = self
+            .shares
+            .get(validator_index)
+            .unwrap()
+            .mul(validator_decryption_key.inverse().unwrap().into_repr())
+            .into_affine();
+        // TODO: Consider using "container" structs from `tpke` for other primitives,
+        //  just like we use `PrivateKeyShare` here for `DecryptionShareSimple`
+        let private_key_share = PrivateKeyShare { private_key_share };
+        DecryptionShareSimple::create(
+            validator_index,
+            validator_decryption_key,
+            &private_key_share,
+            ciphertext,
+            aad,
+        )
+        .unwrap()
+    }
 }
 
 /// Aggregate the PVSS instances in `pvss` from DKG session `dkg`
 /// into a new PVSS instance
+/// See: https://nikkolasg.github.io/ferveo/pvss.html?highlight=aggregate#aggregation
 pub fn aggregate<E: PairingEngine>(
     dkg: &PubliclyVerifiableDkg<E>,
 ) -> PubliclyVerifiableSS<E, Aggregated> {
@@ -232,61 +261,6 @@ pub fn aggregate<E: PairingEngine>(
         sigma,
         phantom: Default::default(),
     }
-}
-
-pub fn aggregate_for_decryption<E: PairingEngine>(
-    dkg: &PubliclyVerifiableDkg<E>,
-) -> Vec<ShareEncryptions<E>> {
-    // From docs: https://nikkolasg.github.io/ferveo/pvss.html?highlight=aggregate#aggregation
-    // "Two PVSS instances may be aggregated into a single PVSS instance by adding elementwise each of the corresponding group elements."
-    let shares = dkg
-        .vss
-        .values()
-        .map(|pvss| pvss.shares.clone())
-        .collect::<Vec<_>>();
-    let first_share = shares.first().unwrap().to_vec();
-    shares
-        .into_iter()
-        .skip(1)
-        // We're assuming that in every PVSS instance, the shares are in the same order
-        .fold(first_share, |acc, shares| {
-            acc.into_iter()
-                .zip_eq(shares.into_iter())
-                .map(|(a, b)| a + b)
-                .collect()
-        })
-}
-
-pub fn make_decryption_shares<E: PairingEngine>(
-    ciphertext: &Ciphertext<E>,
-    validator_keypairs: &[Keypair<E>],
-    aggregate: &[E::G2Affine],
-    aad: &[u8],
-) -> Vec<DecryptionShareSimple<E>> {
-    // TODO: Calculate separately for each validator
-    aggregate
-        .iter()
-        .zip_eq(validator_keypairs.iter())
-        .enumerate()
-        .map(|(decrypter_index, (encrypted_share, keypair))| {
-            // Decrypt private key shares https://nikkolasg.github.io/ferveo/pvss.html#validator-decryption-of-private-key-shares
-            let z_i = encrypted_share
-                .mul(keypair.decryption_key.inverse().unwrap().into_repr());
-            // TODO: Consider using "container" structs from `tpke` for other primitives
-            let private_key_share = PrivateKeyShare {
-                private_key_share: z_i.into_affine(),
-            };
-
-            DecryptionShareSimple::create(
-                decrypter_index,
-                &keypair.decryption_key,
-                &private_key_share,
-                ciphertext,
-                aad,
-            )
-            .unwrap() // Unwrapping here only because this is a test method!
-        })
-        .collect::<Vec<_>>()
 }
 
 #[cfg(test)]
