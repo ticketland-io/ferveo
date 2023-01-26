@@ -40,7 +40,7 @@ mod test_dkg_full {
 
     use crate::dkg::pv::test_common::*;
     use ark_bls12_381::{
-        Bls12_381 as EllipticCurve, Bls12_381, Fr, G1Affine, G2Projective,
+        Bls12_381 as E, Bls12_381, Fr, G1Affine, G2Projective,
     };
     use ark_ec::bls12::G2Affine;
     use ark_ec::group::Group;
@@ -51,24 +51,23 @@ mod test_dkg_full {
     use group_threshold_cryptography::{Ciphertext, DecryptionShareSimple};
     use itertools::{zip_eq, Itertools};
 
-    type E = Bls12_381;
+    type Fqk = <E as PairingEngine>::Fqk;
 
-    #[test]
-    fn test_dkg_simple_decryption_variant_single_validator() {
-        let rng = &mut test_rng();
-        let dkg = setup_dealt_dkg_with_n_validators(1, 1);
+    fn make_shared_secret_simple_tdec(
+        dkg: &PubliclyVerifiableDkg<E>,
+        aad: &[u8],
+        ciphertext: &Ciphertext<E>,
+        validator_keypairs: &[Keypair<E>],
+    ) -> Fqk {
+        // Make sure validators are in the same order dkg is by comparing their public keys
+        dkg.validators
+            .iter()
+            .zip_eq(validator_keypairs.iter())
+            .for_each(|(v, k)| {
+                assert_eq!(v.validator.public_key, k.public());
+            });
 
-        let msg: &[u8] = "abc".as_bytes();
-        let aad: &[u8] = "my-aad".as_bytes();
-        let public_key = dkg.final_key();
-
-        let ciphertext = tpke::encrypt::<_, E>(msg, aad, &public_key, rng);
-
-        let pvss_aggregated = aggregate(&dkg);
-        // Aggregate contains only one set of shares because we only have one validator here
-        assert_eq!(aggregate(&dkg).shares, dkg.vss.get(&0).unwrap().shares);
-
-        let validator_keypairs = gen_n_keypairs(1);
+        let pvss_aggregated = aggregate(dkg);
 
         let decryption_shares: Vec<DecryptionShareSimple<E>> =
             validator_keypairs
@@ -76,7 +75,7 @@ mod test_dkg_full {
                 .enumerate()
                 .map(|(validator_index, validator_keypair)| {
                     pvss_aggregated.make_decryption_share_simple(
-                        &ciphertext,
+                        ciphertext,
                         aad,
                         &validator_keypair.decryption_key,
                         validator_index,
@@ -89,11 +88,32 @@ mod test_dkg_full {
             .elements()
             .take(decryption_shares.len())
             .collect::<Vec<_>>();
+        assert_eq!(domain.len(), decryption_shares.len());
+
+        // TODO: Consider refactor this part into tpke::combine_simple and expose it
+        //  as a public API in tpke::api
+
         let lagrange_coeffs = tpke::prepare_combine_simple::<E>(domain);
 
-        let shared_secret = tpke::share_combine_simple::<E>(
-            &decryption_shares,
-            &lagrange_coeffs,
+        tpke::share_combine_simple::<E>(&decryption_shares, &lagrange_coeffs)
+    }
+
+    #[test]
+    fn test_dkg_simple_decryption_variant_single_validator() {
+        let rng = &mut test_rng();
+
+        let dkg = setup_dealt_dkg_with_n_validators(1, 1);
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
+        let public_key = dkg.final_key();
+        let ciphertext = tpke::encrypt::<_, E>(msg, aad, &public_key, rng);
+        let validator_keypairs = gen_n_keypairs(1);
+
+        let shared_secret = make_shared_secret_simple_tdec(
+            &dkg,
+            aad,
+            &ciphertext,
+            &validator_keypairs,
         );
 
         let plaintext = tpke::checked_decrypt_with_shared_secret(
@@ -108,21 +128,40 @@ mod test_dkg_full {
     #[test]
     fn test_dkg_simple_decryption_variant() {
         let rng = &mut test_rng();
-        let dkg = setup_dealt_dkg_with_n_validators(3, 4);
 
+        let dkg = setup_dealt_dkg_with_n_validators(3, 4);
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
         let public_key = dkg.final_key();
         let ciphertext = tpke::encrypt::<_, E>(msg, aad, &public_key, rng);
-
         let validator_keypairs = gen_n_keypairs(4);
-        // Make sure validators are in the same order dkg is by comparing their public keys
-        dkg.validators
-            .iter()
-            .zip_eq(validator_keypairs.iter())
-            .for_each(|(v, k)| {
-                assert_eq!(v.validator.public_key, k.public());
-            });
+
+        let shared_secret = make_shared_secret_simple_tdec(
+            &dkg,
+            aad,
+            &ciphertext,
+            &validator_keypairs,
+        );
+
+        let plaintext = tpke::checked_decrypt_with_shared_secret(
+            &ciphertext,
+            aad,
+            &shared_secret,
+        )
+        .unwrap();
+        assert_eq!(plaintext, msg);
+    }
+
+    #[test]
+    fn test_dkg_simple_decryption_shares_verification() {
+        let rng = &mut test_rng();
+
+        let dkg = setup_dealt_dkg_with_n_validators(3, 4);
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
+        let public_key = dkg.final_key();
+        let ciphertext = tpke::encrypt::<_, E>(msg, aad, &public_key, rng);
+        let validator_keypairs = gen_n_keypairs(4);
 
         let pvss_aggregated = aggregate(&dkg);
 
@@ -140,39 +179,45 @@ mod test_dkg_full {
                 })
                 .collect();
 
-        let domain = &dkg.domain.elements().collect::<Vec<_>>();
-        assert_eq!(domain.len(), decryption_shares.len());
-        let lagrange_coeffs = tpke::prepare_combine_simple::<E>(domain);
-
-        let shared_secret = tpke::share_combine_simple::<E>(
-            &decryption_shares,
-            &lagrange_coeffs,
-        );
-
-        // Combination works, let's decrypt
-
-        let plaintext = tpke::checked_decrypt_with_shared_secret(
-            &ciphertext,
-            aad,
-            &shared_secret,
-        )
-        .unwrap();
-        assert_eq!(plaintext, msg);
-
         // Testing green-path decryption share verification
         izip!(
-            decryption_shares,
-            pvss_aggregated.shares,
-            validator_keypairs
+            &pvss_aggregated.shares,
+            &validator_keypairs,
+            &decryption_shares,
         )
-        .for_each(|(decryption_share, y_i, validator_keypair)| {
-            assert!(decryption_share.verify(
-                &y_i,
-                &validator_keypair.public().encryption_key,
-                &dkg.pvss_params.h,
-                &ciphertext,
-            ));
-        });
+        .for_each(
+            |(aggregated_share, validator_keypair, decryption_share)| {
+                assert!(decryption_share.verify(
+                    aggregated_share,
+                    &validator_keypair.public().encryption_key,
+                    &dkg.pvss_params.h,
+                    &ciphertext,
+                ));
+            },
+        );
+
+        // Testing red-path decryption share verification
+        let decryption_share = decryption_shares[0].clone();
+
+        // Should fail because of the bad decryption share
+        let mut with_bad_decryption_share = decryption_share.clone();
+        with_bad_decryption_share.decryption_share = Fqk::zero();
+        assert!(!with_bad_decryption_share.verify(
+            &pvss_aggregated.shares[0],
+            &validator_keypairs[0].public().encryption_key,
+            &dkg.pvss_params.h,
+            &ciphertext,
+        ));
+
+        // Should fail because of the bad checksum
+        let mut with_bad_checksum = decryption_share;
+        with_bad_checksum.validator_checksum = G1Affine::zero();
+        assert!(!with_bad_checksum.verify(
+            &pvss_aggregated.shares[0],
+            &validator_keypairs[0].public().encryption_key,
+            &dkg.pvss_params.h,
+            &ciphertext,
+        ));
     }
 
     // fn test_dkg_simple_decryption_variant_share_recovery() {
@@ -231,15 +276,12 @@ mod test_dkg_full {
     //
     //     // Recover the share
     //     let x_r = Fr::rand(rng);
-    //     let y_r = tpke::recover_share_at_point(
-    //         &remaining_participants,
-    //         threshold,
+    //     let recovered_key_share = tpke::recover_private_key_share_at_point(
+    //         &new_dkg.validators,
+    //         new_dkg.params.security_threshold as usize,
     //         &x_r,
     //         rng,
     //     );
-    //     let recovered_key_share = tpke::PrivateKeyShare {
-    //         private_key_share: y_r.into_affine(),
-    //     };
     //
     //     // Creating decryption shares
     //     let mut decryption_shares: Vec<_> = remaining_participants
@@ -264,4 +306,64 @@ mod test_dkg_full {
     //
     //     assert_eq!(old_shared_secret, new_shared_secret);
     // }
+
+    #[test]
+    fn simple_threshold_decryption_with_share_refreshing() {
+        let rng = &mut test_rng();
+        let dkg = setup_dealt_dkg_with_n_validators(3, 4);
+
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
+        let public_key = dkg.final_key();
+        let ciphertext = tpke::encrypt::<_, E>(msg, aad, &public_key, rng);
+
+        let validator_keypairs = gen_n_keypairs(4);
+        let pvss_aggregated = aggregate(&dkg);
+
+        // Create an initial shared secret
+        let old_shared_secret = make_shared_secret_simple_tdec(
+            &dkg,
+            aad,
+            &ciphertext,
+            &validator_keypairs,
+        );
+
+        // Now, we're going to refresh the shares and check that the shared secret is the same
+
+        // Dealer computes a new random polynomial with constant term x_r = 0
+        let polynomial = tpke::make_random_polynomial_at::<E>(
+            dkg.params.security_threshold as usize,
+            &Fr::zero(),
+            rng,
+        );
+
+        // Dealer shares the polynomial with participants
+
+        // Participants computes new decryption shares
+        let new_decryption_shares: Vec<DecryptionShareSimple<E>> =
+            validator_keypairs
+                .iter()
+                .enumerate()
+                .map(|(validator_index, validator_keypair)| {
+                    pvss_aggregated.refresh_decryption_share(
+                        &ciphertext,
+                        aad,
+                        &validator_keypair.decryption_key,
+                        validator_index,
+                        &polynomial,
+                        &dkg,
+                    )
+                })
+                .collect();
+
+        // Create a new shared secret
+        let domain = &dkg.domain.elements().collect::<Vec<_>>();
+        let lagrange_coeffs = tpke::prepare_combine_simple::<E>(domain);
+        let new_shared_secret = tpke::share_combine_simple::<E>(
+            &new_decryption_shares,
+            &lagrange_coeffs,
+        );
+
+        assert_eq!(old_shared_secret, new_shared_secret);
+    }
 }

@@ -695,13 +695,18 @@ mod tests {
         // Participants computes new decryption shares
         let new_decryption_shares: Vec<_> = contexts
             .iter()
-            .map(|participant| {
+            .enumerate()
+            .map(|(i, p)| {
                 // Participant computes share updates and update their private key shares
-                let private_key_share =
-                    refresh_private_key_share(participant, &polynomial);
+                let private_key_share = refresh_private_key_share::<E>(
+                    &p.setup_params.h.into_projective(),
+                    &p.public_decryption_contexts[i].domain,
+                    &polynomial,
+                    &p.private_key_share.private_key_share,
+                );
                 DecryptionShareSimple::create(
-                    participant.index,
-                    &participant.validator_private_key,
+                    p.index,
+                    &p.validator_private_key,
                     &private_key_share,
                     &ciphertext,
                     aad,

@@ -132,19 +132,18 @@ pub fn compute_polynomial_deltas<E: PairingEngine>(
 
 // TODO: Expose a method to create a proper decryption share after refreshing
 pub fn refresh_private_key_share<E: PairingEngine>(
-    participant: &PrivateDecryptionContextSimple<E>,
+    h: &E::G2Projective,
+    domain_point: &E::Fr,
     polynomial: &DensePolynomial<E::Fr>,
+    validator_private_key_share: &E::G2Affine,
 ) -> PrivateKeyShare<E> {
-    let h_g2 = E::G2Projective::from(participant.setup_params.h);
-    let domain_point =
-        participant.public_decryption_contexts[participant.index].domain;
-    let evaluated_polynomial = polynomial.evaluate(&domain_point);
-    let share_update = h_g2.mul(evaluated_polynomial.into_repr());
-    let updated_share = participant
-        .private_key_share
-        .private_key_share
-        .into_projective()
-        + share_update;
+    // let h_g2 = E::G2Projective::from(participant.setup_params.h);
+    // let domain_point =
+    //     participant.public_decryption_contexts[participant.index].domain;
+    let evaluated_polynomial = polynomial.evaluate(domain_point);
+    let share_update = h.mul(evaluated_polynomial.into_repr());
+    let updated_share =
+        validator_private_key_share.into_projective() + share_update;
     PrivateKeyShare {
         private_key_share: updated_share.into_affine(),
     }

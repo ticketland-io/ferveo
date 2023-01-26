@@ -9,7 +9,8 @@ use ark_ff::UniformRand;
 use ark_serialize::*;
 use ferveo_common::{Keypair, PublicKey};
 use group_threshold_cryptography::{
-    Ciphertext, DecryptionShareFast, DecryptionShareSimple, PrivateKeyShare,
+    refresh_private_key_share, Ciphertext, DecryptionShareFast,
+    DecryptionShareSimple, PrivateKeyShare,
 };
 use itertools::{zip_eq, Itertools};
 use subproductdomain::fast_multiexp;
@@ -197,6 +198,19 @@ impl<E: PairingEngine, T: Aggregate> PubliclyVerifiableSS<E, T> {
         }
     }
 
+    fn decrypt_private_key_share(
+        &self,
+        validator_decryption_key: &E::Fr,
+        validator_index: usize,
+    ) -> E::G2Affine {
+        // Decrypt private key shares https://nikkolasg.github.io/ferveo/pvss.html#validator-decryption-of-private-key-shares
+        self.shares
+            .get(validator_index)
+            .unwrap()
+            .mul(validator_decryption_key.inverse().unwrap().into_repr())
+            .into_affine()
+    }
+
     pub fn make_decryption_share_simple(
         &self,
         ciphertext: &Ciphertext<E>,
@@ -204,13 +218,10 @@ impl<E: PairingEngine, T: Aggregate> PubliclyVerifiableSS<E, T> {
         validator_decryption_key: &E::Fr,
         validator_index: usize,
     ) -> DecryptionShareSimple<E> {
-        // Decrypt private key shares https://nikkolasg.github.io/ferveo/pvss.html#validator-decryption-of-private-key-shares
-        let private_key_share = self
-            .shares
-            .get(validator_index)
-            .unwrap()
-            .mul(validator_decryption_key.inverse().unwrap().into_repr())
-            .into_affine();
+        let private_key_share = self.decrypt_private_key_share(
+            validator_decryption_key,
+            validator_index,
+        );
         // TODO: Consider using "container" structs from `tpke` for other primitives,
         //  just like we use `PrivateKeyShare` here for `DecryptionShareSimple`
         let private_key_share = PrivateKeyShare { private_key_share };
@@ -221,7 +232,38 @@ impl<E: PairingEngine, T: Aggregate> PubliclyVerifiableSS<E, T> {
             ciphertext,
             aad,
         )
-        .unwrap()
+        .unwrap() // TODO: Add proper error handling
+    }
+
+    pub fn refresh_decryption_share(
+        &self,
+        ciphertext: &Ciphertext<E>,
+        aad: &[u8],
+        validator_decryption_key: &E::Fr,
+        validator_index: usize,
+        polynomial: &DensePolynomial<E::Fr>,
+        dkg: &PubliclyVerifiableDkg<E>,
+    ) -> DecryptionShareSimple<E> {
+        let validator_private_key_share = self.decrypt_private_key_share(
+            validator_decryption_key,
+            validator_index,
+        );
+        let h = dkg.pvss_params.h;
+        let domain_point = dkg.domain.element(validator_index);
+        let refreshed_private_key_share = refresh_private_key_share(
+            &h,
+            &domain_point,
+            polynomial,
+            &validator_private_key_share,
+        );
+        DecryptionShareSimple::create(
+            validator_index,
+            validator_decryption_key,
+            &refreshed_private_key_share,
+            ciphertext,
+            aad,
+        )
+        .unwrap() // TODO: Add proper error handling
     }
 }
 
