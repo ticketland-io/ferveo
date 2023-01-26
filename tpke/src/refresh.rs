@@ -5,90 +5,53 @@ use ark_ec::{AffineCurve, PairingEngine, ProjectiveCurve};
 use ark_ff::{PrimeField, Zero};
 use ark_poly::{univariate::DensePolynomial, Polynomial, UVPolynomial};
 use itertools::zip_eq;
-use rand::prelude::StdRng;
 use rand_core::RngCore;
 use std::collections::HashMap;
 use std::usize;
 
-// TODO: Expose a method to create a proper decryption share after refreshing
-pub fn recover_private_key_share_at_point<E: PairingEngine>(
-    other_participants: &[PrivateDecryptionContextSimple<E>],
-    threshold: usize,
+/// From PSS paper, section 4.2.1, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
+pub fn prepare_share_updates_for_recovery<E: PairingEngine>(
+    participants: &[PrivateDecryptionContextSimple<E>],
     x_r: &E::Fr,
-    rng: &mut StdRng,
-) -> PrivateKeyShare<E> {
-    let share_updates = prepare_share_updates_for_recovery::<E>(
-        other_participants,
-        x_r,
-        threshold,
-        rng,
+    threshold: usize,
+    rng: &mut impl RngCore,
+) -> HashMap<usize, E::G2Projective> {
+    // Generate a new random polynomial with constant term x_r
+    let d_i = make_random_polynomial_at::<E>(threshold, x_r, rng);
+
+    // Now, we need to evaluate the polynomial at each of participants' indices
+    compute_polynomial_deltas::<E>(participants, &d_i)
+}
+
+/// From PSS paper, section 4.2.3, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
+pub fn update_share_for_recovery<E: PairingEngine>(
+    participant: &PrivateDecryptionContextSimple<E>,
+    share_updates: &[E::G2Projective],
+) -> E::G2Projective {
+    let mut new_y = E::G2Projective::from(
+        participant.private_key_share.private_key_share, // y_i
     );
+    for delta in share_updates {
+        new_y += delta; // y_i + delta_i
+    }
+    new_y
+}
 
-    let new_shares_y =
-        update_shares_for_recovery::<E>(other_participants, &share_updates);
-
-    // From the PSS paper, section 4.2.4, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
+/// From the PSS paper, section 4.2.4, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
+pub fn recover_share_from_fragments<E: PairingEngine>(
+    x_r: &E::Fr,
+    domain_points: &[E::Fr],
+    new_share_fragments: Vec<E::G2Projective>,
+) -> PrivateKeyShare<E> {
     // Interpolate new shares to recover y_r
-    let shares_x = &other_participants[0]
-        .public_decryption_contexts
-        .iter()
-        .map(|ctxt| ctxt.domain)
-        .collect::<Vec<_>>();
-
-    // Recover y_r
-    let lagrange = lagrange_basis_at::<E>(shares_x, x_r);
-    let prods =
-        zip_eq(new_shares_y, lagrange).map(|(y_j, l)| y_j.mul(l.into_repr()));
+    let lagrange = lagrange_basis_at::<E>(domain_points, x_r);
+    let prods = zip_eq(new_share_fragments, lagrange)
+        .map(|(y_j, l)| y_j.mul(l.into_repr()));
     let y_r = prods.fold(E::G2Projective::zero(), |acc, y_j| acc + y_j);
 
     PrivateKeyShare {
         private_key_share: y_r.into_affine(),
     }
-}
-
-/// From PSS paper, section 4.2.1, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
-fn prepare_share_updates_for_recovery<E: PairingEngine>(
-    participants: &[PrivateDecryptionContextSimple<E>],
-    x_r: &E::Fr,
-    threshold: usize,
-    rng: &mut impl RngCore,
-) -> HashMap<usize, HashMap<usize, E::G2Projective>> {
-    // TODO: Refactor this function so that each participant performs it individually
-    // Each participant prepares an update for each other participant
-    participants
-        .iter()
-        .map(|p1| {
-            let i = p1.index;
-            // Generate a new random polynomial with constant term x_r
-            let d_i = make_random_polynomial_at::<E>(threshold, x_r, rng);
-
-            // Now, we need to evaluate the polynomial at each of participants' indices
-            let deltas_i: HashMap<_, _> =
-                compute_polynomial_deltas::<E>(participants, &d_i);
-            (i, deltas_i)
-        })
-        .collect::<HashMap<_, _>>()
-}
-
-/// From PSS paper, section 4.2.3, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
-fn update_shares_for_recovery<E: PairingEngine>(
-    participants: &[PrivateDecryptionContextSimple<E>],
-    deltas: &HashMap<usize, HashMap<usize, E::G2Projective>>,
-) -> Vec<E::G2Projective> {
-    // TODO: Refactor this function so that each participant performs it individually
-    participants
-        .iter()
-        .map(|p| {
-            let i = p.index;
-            let mut new_y = E::G2Projective::from(
-                p.private_key_share.private_key_share, // y_i
-            );
-            for j in deltas.keys() {
-                new_y += deltas[j][&i];
-            }
-            new_y
-        })
-        .collect()
 }
 
 pub fn make_random_polynomial_at<E: PairingEngine>(

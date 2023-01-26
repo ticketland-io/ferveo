@@ -58,7 +58,11 @@ mod test_dkg_full {
         aad: &[u8],
         ciphertext: &Ciphertext<E>,
         validator_keypairs: &[Keypair<E>],
-    ) -> Fqk {
+    ) -> (
+        PubliclyVerifiableSS<E, Aggregated>,
+        Vec<DecryptionShareSimple<E>>,
+        Fqk,
+    ) {
         // Make sure validators are in the same order dkg is by comparing their public keys
         dkg.validators
             .iter()
@@ -94,8 +98,12 @@ mod test_dkg_full {
         //  as a public API in tpke::api
 
         let lagrange_coeffs = tpke::prepare_combine_simple::<E>(domain);
+        let shared_secret = tpke::share_combine_simple::<E>(
+            &decryption_shares,
+            &lagrange_coeffs,
+        );
 
-        tpke::share_combine_simple::<E>(&decryption_shares, &lagrange_coeffs)
+        (pvss_aggregated, decryption_shares, shared_secret)
     }
 
     #[test]
@@ -109,7 +117,7 @@ mod test_dkg_full {
         let ciphertext = tpke::encrypt::<_, E>(msg, aad, &public_key, rng);
         let validator_keypairs = gen_n_keypairs(1);
 
-        let shared_secret = make_shared_secret_simple_tdec(
+        let (_, _, shared_secret) = make_shared_secret_simple_tdec(
             &dkg,
             aad,
             &ciphertext,
@@ -136,7 +144,7 @@ mod test_dkg_full {
         let ciphertext = tpke::encrypt::<_, E>(msg, aad, &public_key, rng);
         let validator_keypairs = gen_n_keypairs(4);
 
-        let shared_secret = make_shared_secret_simple_tdec(
+        let (_, _, shared_secret) = make_shared_secret_simple_tdec(
             &dkg,
             aad,
             &ciphertext,
@@ -163,23 +171,14 @@ mod test_dkg_full {
         let ciphertext = tpke::encrypt::<_, E>(msg, aad, &public_key, rng);
         let validator_keypairs = gen_n_keypairs(4);
 
-        let pvss_aggregated = aggregate(&dkg);
+        let (pvss_aggregated, decryption_shares, _) =
+            make_shared_secret_simple_tdec(
+                &dkg,
+                aad,
+                &ciphertext,
+                &validator_keypairs,
+            );
 
-        let decryption_shares: Vec<DecryptionShareSimple<E>> =
-            validator_keypairs
-                .iter()
-                .enumerate()
-                .map(|(validator_index, validator_keypair)| {
-                    pvss_aggregated.make_decryption_share_simple(
-                        &ciphertext,
-                        aad,
-                        &validator_keypair.decryption_key,
-                        validator_index,
-                    )
-                })
-                .collect();
-
-        // Testing green-path decryption share verification
         izip!(
             &pvss_aggregated.shares,
             &validator_keypairs,
@@ -222,88 +221,91 @@ mod test_dkg_full {
 
     // fn test_dkg_simple_decryption_variant_share_recovery() {
     //     let rng = &mut test_rng();
-    //     let dkg = setup_dealt_dkg_with_n_validators(3, 4);
     //
+    //     let dkg = setup_dealt_dkg_with_n_validators(3, 4);
     //     let msg: &[u8] = "abc".as_bytes();
     //     let aad: &[u8] = "my-aad".as_bytes();
     //     let public_key = dkg.final_key();
     //     let ciphertext = tpke::encrypt::<_, E>(msg, aad, &public_key, rng);
-    //
     //     let validator_keypairs = gen_n_keypairs(4);
-    //     // Make sure validators are in the same order dkg is by comparing their public keys
-    //     dkg.validators
-    //         .iter()
-    //         .zip_eq(validator_keypairs.iter())
-    //         .for_each(|(v, k)| {
-    //             assert_eq!(v.validator.public_key, k.public());
-    //         });
-    //
-    //     let pvss_aggregated = aggregate(&dkg);
-    //
-    //     let decryption_shares: Vec<DecryptionShareSimple<E>> =
-    //         validator_keypairs
-    //             .iter()
-    //             .enumerate()
-    //             .map(|(validator_index, validator_keypair)| {
-    //                 pvss_aggregated.make_decryption_share_simple(
-    //                     &ciphertext,
-    //                     aad,
-    //                     &validator_keypair.decryption_key,
-    //                     validator_index,
-    //                 )
-    //             })
-    //             .collect();
-    //
-    //     let domain = &dkg
-    //         .domain
-    //         .elements()
-    //         .collect::<Vec<_>>();
-    //     assert_eq!(domain.len(), decryption_shares.len());
-    //     let lagrange_coeffs = tpke::prepare_combine_simple::<E>(domain);
     //
     //     // Create an initial shared secret
-    //
-    //     let old_shared_secret = tpke::share_combine_simple::<E>(
-    //         &decryption_shares,
-    //         &lagrange_coeffs,
+    //     let (_,_,old_shared_secret) = make_shared_secret_simple_tdec(
+    //         &dkg,
+    //         aad,
+    //         &ciphertext,
+    //         &validator_keypairs,
     //     );
     //
     //     // Now, we're going to recover a new share at a random point and check that the shared secret is still the same
+    //
+    //     // Our random point
+    //     let x_r = Fr::rand(rng);
     //
     //     // Remove one participant from the contexts and all nested structure
     //     let mut new_dkg = dkg;
     //     let removed_validator = new_dkg.validators.pop().unwrap();
     //
-    //     // Recover the share
-    //     let x_r = Fr::rand(rng);
-    //     let recovered_key_share = tpke::recover_private_key_share_at_point(
-    //         &new_dkg.validators,
-    //         new_dkg.params.security_threshold as usize,
+    //     // Each participant prepares an update for each other participant
+    //     let share_updates = remaining_participants
+    //         .iter()
+    //         .map(|p| {
+    //             let deltas_i = prepare_share_updates_for_recovery(
+    //                 &remaining_participants,
+    //                 &x_r,
+    //                 threshold,
+    //                 rng,
+    //             );
+    //             (p.index, deltas_i)
+    //         })
+    //         .collect::<HashMap<_, _>>();
+    //
+    //     // Participants share updates and update their shares
+    //     let new_share_fragments: Vec<_> = remaining_participants
+    //         .iter()
+    //         .map(|p| {
+    //             // Current participant receives updates from other participants
+    //             let updates_for_participant: Vec<_> = share_updates
+    //                 .values()
+    //                 .map(|updates| *updates.get(&p.index).unwrap())
+    //                 .collect();
+    //
+    //             // And updates their share
+    //             update_share_for_recovery::<E>(p, &updates_for_participant)
+    //         })
+    //         .collect();
+    //
+    //     // Now, we have to combine new share fragments into a new share
+    //     let domain_points = &remaining_participants[0]
+    //         .public_decryption_contexts
+    //         .iter()
+    //         .map(|ctxt| ctxt.domain)
+    //         .collect::<Vec<_>>();
+    //     let new_private_key_share = recover_share_from_fragments(
     //         &x_r,
-    //         rng,
+    //         domain_points,
+    //         new_share_fragments,
     //     );
     //
-    //     // Creating decryption shares
+    //     // Get decryption shares from remaining participants
     //     let mut decryption_shares: Vec<_> = remaining_participants
     //         .iter()
     //         .map(|c| c.create_share(&ciphertext, aad).unwrap())
     //         .collect();
-    //     decryption_shares.push(DecryptionShareSimple {
-    //         decrypter_index: removed_participant.index,
-    //         decryption_share: make_decryption_share(
-    //             &recovered_key_share,
+    //
+    //     // Create a decryption share from a recovered private key share
+    //     let new_validator_decryption_key = Fr::rand(rng);
+    //     let validator_index = removed_participant.index;
+    //     decryption_shares.push(
+    //         DecryptionShareSimple::create(
+    //             validator_index,
+    //             &new_validator_decryption_key,
+    //             &new_private_key_share,
     //             &ciphertext,
-    //         ),
-    //         // TODO: Implement a method to make a proper decryption share after refreshing
-    //         validator_checksum: G1Affine::zero(),
-    //     });
-    //
-    //     // Creating a shared secret from remaining shares and the recovered one
-    //     let new_shared_secret = make_shared_secret(
-    //         &remaining_participants[0].public_decryption_contexts,
-    //         &decryption_shares,
+    //             aad,
+    //         )
+    //             .unwrap(),
     //     );
-    //
     //     assert_eq!(old_shared_secret, new_shared_secret);
     // }
 
@@ -321,7 +323,7 @@ mod test_dkg_full {
         let pvss_aggregated = aggregate(&dkg);
 
         // Create an initial shared secret
-        let old_shared_secret = make_shared_secret_simple_tdec(
+        let (_, _, old_shared_secret) = make_shared_secret_simple_tdec(
             &dkg,
             aad,
             &ciphertext,

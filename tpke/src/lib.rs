@@ -275,14 +275,15 @@ pub fn generate_random<R: RngCore, E: PairingEngine>(
 
 #[cfg(test)]
 mod tests {
-
     use crate::*;
     use ark_bls12_381::Fr;
+    use std::collections::HashMap;
     use std::ops::Mul;
 
     use ark_ec::ProjectiveCurve;
     use ark_ff::BigInteger256;
     use ark_std::test_rng;
+
     use rand::prelude::StdRng;
 
     type E = ark_bls12_381::Bls12_381;
@@ -559,19 +560,53 @@ mod tests {
             .domain;
         let original_private_key_share = selected_participant.private_key_share;
 
-        // Now, we have to remove the participant from the contexts and all nested structures
+        // Remove one participant from the contexts and all nested structures
         let mut remaining_participants = contexts;
         for p in &mut remaining_participants {
-            p.public_decryption_contexts.pop();
+            p.public_decryption_contexts.pop().unwrap();
         }
 
-        // Recover the share
-        let new_private_key_share = recover_private_key_share_at_point(
-            &remaining_participants,
-            threshold,
+        // Each participant prepares an update for each other participant
+        let share_updates = remaining_participants
+            .iter()
+            .map(|p| {
+                let deltas_i = prepare_share_updates_for_recovery(
+                    &remaining_participants,
+                    &x_r,
+                    threshold,
+                    rng,
+                );
+                (p.index, deltas_i)
+            })
+            .collect::<HashMap<_, _>>();
+
+        // Participants share updates and update their shares
+        let new_share_fragments: Vec<_> = remaining_participants
+            .iter()
+            .map(|p| {
+                // Current participant receives updates from other participants
+                let updates_for_participant: Vec<_> = share_updates
+                    .values()
+                    .map(|updates| *updates.get(&p.index).unwrap())
+                    .collect();
+
+                // And updates their share
+                update_share_for_recovery::<E>(p, &updates_for_participant)
+            })
+            .collect();
+
+        // Now, we have to combine new share fragments into a new share
+        let domain_points = &remaining_participants[0]
+            .public_decryption_contexts
+            .iter()
+            .map(|ctxt| ctxt.domain)
+            .collect::<Vec<_>>();
+        let new_private_key_share = recover_share_from_fragments(
             &x_r,
-            rng,
+            domain_points,
+            new_share_fragments,
         );
+
         assert_eq!(new_private_key_share, original_private_key_share);
     }
 
@@ -619,6 +654,9 @@ mod tests {
 
         // Now, we're going to recover a new share at a random point and check that the shared secret is still the same
 
+        // Our random point
+        let x_r = Fr::rand(rng);
+
         // Remove one participant from the contexts and all nested structures
         let mut remaining_participants = contexts;
         let removed_participant = remaining_participants.pop().unwrap();
@@ -626,13 +664,45 @@ mod tests {
             p.public_decryption_contexts.pop().unwrap();
         }
 
-        // Recover the share at a random point
-        let x_r = Fr::rand(rng);
-        let recovered_private_key_share = recover_private_key_share_at_point(
-            &remaining_participants,
-            threshold,
+        // Each participant prepares an update for each other participant
+        let share_updates = remaining_participants
+            .iter()
+            .map(|p| {
+                let deltas_i = prepare_share_updates_for_recovery(
+                    &remaining_participants,
+                    &x_r,
+                    threshold,
+                    rng,
+                );
+                (p.index, deltas_i)
+            })
+            .collect::<HashMap<_, _>>();
+
+        // Participants share updates and update their shares
+        let new_share_fragments: Vec<_> = remaining_participants
+            .iter()
+            .map(|p| {
+                // Current participant receives updates from other participants
+                let updates_for_participant: Vec<_> = share_updates
+                    .values()
+                    .map(|updates| *updates.get(&p.index).unwrap())
+                    .collect();
+
+                // And updates their share
+                update_share_for_recovery::<E>(p, &updates_for_participant)
+            })
+            .collect();
+
+        // Now, we have to combine new share fragments into a new share
+        let domain_points = &remaining_participants[0]
+            .public_decryption_contexts
+            .iter()
+            .map(|ctxt| ctxt.domain)
+            .collect::<Vec<_>>();
+        let new_private_key_share = recover_share_from_fragments(
             &x_r,
-            rng,
+            domain_points,
+            new_share_fragments,
         );
 
         // Get decryption shares from remaining participants
@@ -648,7 +718,7 @@ mod tests {
             DecryptionShareSimple::create(
                 validator_index,
                 &new_validator_decryption_key,
-                &recovered_private_key_share,
+                &new_private_key_share,
                 &ciphertext,
                 aad,
             )
