@@ -567,11 +567,18 @@ mod tests {
         }
 
         // Each participant prepares an update for each other participant
+        let domain_points = remaining_participants[0]
+            .public_decryption_contexts
+            .iter()
+            .map(|c| c.domain)
+            .collect::<Vec<_>>();
+        let h = remaining_participants[0].public_decryption_contexts[0].h;
         let share_updates = remaining_participants
             .iter()
             .map(|p| {
-                let deltas_i = prepare_share_updates_for_recovery(
-                    &remaining_participants,
+                let deltas_i = prepare_share_updates_for_recovery::<E>(
+                    &domain_points,
+                    &h,
                     &x_r,
                     threshold,
                     rng,
@@ -587,11 +594,14 @@ mod tests {
                 // Current participant receives updates from other participants
                 let updates_for_participant: Vec<_> = share_updates
                     .values()
-                    .map(|updates| *updates.get(&p.index).unwrap())
+                    .map(|updates| *updates.get(p.index).unwrap())
                     .collect();
 
                 // And updates their share
-                update_share_for_recovery::<E>(p, &updates_for_participant)
+                update_share_for_recovery::<E>(
+                    &p.private_key_share,
+                    &updates_for_participant,
+                )
             })
             .collect();
 
@@ -604,7 +614,7 @@ mod tests {
         let new_private_key_share = recover_share_from_fragments(
             &x_r,
             domain_points,
-            new_share_fragments,
+            &new_share_fragments,
         );
 
         assert_eq!(new_private_key_share, original_private_key_share);
@@ -665,11 +675,18 @@ mod tests {
         }
 
         // Each participant prepares an update for each other participant
+        let domain_points = remaining_participants[0]
+            .public_decryption_contexts
+            .iter()
+            .map(|c| c.domain)
+            .collect::<Vec<_>>();
+        let h = remaining_participants[0].public_decryption_contexts[0].h;
         let share_updates = remaining_participants
             .iter()
             .map(|p| {
-                let deltas_i = prepare_share_updates_for_recovery(
-                    &remaining_participants,
+                let deltas_i = prepare_share_updates_for_recovery::<E>(
+                    &domain_points,
+                    &h,
                     &x_r,
                     threshold,
                     rng,
@@ -685,11 +702,14 @@ mod tests {
                 // Current participant receives updates from other participants
                 let updates_for_participant: Vec<_> = share_updates
                     .values()
-                    .map(|updates| *updates.get(&p.index).unwrap())
+                    .map(|updates| *updates.get(p.index).unwrap())
                     .collect();
 
                 // And updates their share
-                update_share_for_recovery::<E>(p, &updates_for_participant)
+                update_share_for_recovery::<E>(
+                    &p.private_key_share,
+                    &updates_for_participant,
+                )
             })
             .collect();
 
@@ -702,7 +722,7 @@ mod tests {
         let new_private_key_share = recover_share_from_fragments(
             &x_r,
             domain_points,
-            new_share_fragments,
+            &new_share_fragments,
         );
 
         // Get decryption shares from remaining participants
@@ -772,7 +792,7 @@ mod tests {
                     &p.setup_params.h.into_projective(),
                     &p.public_decryption_contexts[i].domain,
                     &polynomial,
-                    &p.private_key_share.private_key_share,
+                    &p.private_key_share,
                 );
                 DecryptionShareSimple::create(
                     p.index,

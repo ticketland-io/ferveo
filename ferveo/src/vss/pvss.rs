@@ -198,17 +198,19 @@ impl<E: PairingEngine, T: Aggregate> PubliclyVerifiableSS<E, T> {
         }
     }
 
-    fn decrypt_private_key_share(
+    pub fn decrypt_private_key_share(
         &self,
         validator_decryption_key: &E::Fr,
         validator_index: usize,
-    ) -> E::G2Affine {
+    ) -> PrivateKeyShare<E> {
         // Decrypt private key shares https://nikkolasg.github.io/ferveo/pvss.html#validator-decryption-of-private-key-shares
-        self.shares
+        let private_key_share = self
+            .shares
             .get(validator_index)
             .unwrap()
             .mul(validator_decryption_key.inverse().unwrap().into_repr())
-            .into_affine()
+            .into_affine();
+        PrivateKeyShare { private_key_share }
     }
 
     pub fn make_decryption_share_simple(
@@ -222,9 +224,6 @@ impl<E: PairingEngine, T: Aggregate> PubliclyVerifiableSS<E, T> {
             validator_decryption_key,
             validator_index,
         );
-        // TODO: Consider using "container" structs from `tpke` for other primitives,
-        //  just like we use `PrivateKeyShare` here for `DecryptionShareSimple`
-        let private_key_share = PrivateKeyShare { private_key_share };
         DecryptionShareSimple::create(
             validator_index,
             validator_decryption_key,
