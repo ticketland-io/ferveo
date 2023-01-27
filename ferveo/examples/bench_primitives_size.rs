@@ -128,8 +128,8 @@ fn main() {
         dkg.vss[&0].serialize(&mut transcript_bytes).unwrap();
 
         save_data(
-            threshold as usize,
             *shares_num as usize,
+            threshold as usize,
             transcript_bytes.len(),
         );
     }
