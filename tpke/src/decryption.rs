@@ -44,18 +44,6 @@ pub struct DecryptionShareSimple<E: PairingEngine> {
 }
 
 impl<E: PairingEngine> DecryptionShareSimple<E> {
-    pub fn from_parts(
-        decrypter_index: usize,
-        decryption_share: E::Fqk,
-    ) -> Self {
-        DecryptionShareSimple {
-            decrypter_index,
-            decryption_share,
-            // TODO: Implement a method to make a proper decryption share after refreshing
-            validator_checksum: E::G1Affine::zero(),
-        }
-    }
-
     pub fn create(
         validator_index: usize,
         validator_decryption_key: &E::Fr,

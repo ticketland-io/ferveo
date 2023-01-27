@@ -32,24 +32,27 @@ pub fn prepare_share_updates_for_recovery<E: PairingEngine>(
 pub fn update_share_for_recovery<E: PairingEngine>(
     private_key_share: &PrivateKeyShare<E>,
     share_updates: &[E::G2Projective],
-) -> E::G2Projective {
-    let mut new_y = private_key_share.private_key_share.into_projective(); // y_i
-    for delta in share_updates {
-        new_y += delta; // y_i + delta_i
-    }
-    new_y
+) -> PrivateKeyShare<E> {
+    let private_key_share = share_updates
+        .iter()
+        .fold(
+            private_key_share.private_key_share.into_projective(),
+            |acc, delta| acc + delta,
+        )
+        .into_affine();
+    PrivateKeyShare { private_key_share }
 }
 
 /// From the PSS paper, section 4.2.4, (https://link.springer.com/content/pdf/10.1007/3-540-44750-4_27.pdf)
-pub fn recover_share_from_fragments<E: PairingEngine>(
+pub fn recover_share_from_updated_private_shares<E: PairingEngine>(
     x_r: &E::Fr,
     domain_points: &[E::Fr],
-    new_share_fragments: &[E::G2Projective],
+    updated_private_shares: &[PrivateKeyShare<E>],
 ) -> PrivateKeyShare<E> {
     // Interpolate new shares to recover y_r
     let lagrange = lagrange_basis_at::<E>(domain_points, x_r);
-    let prods = zip_eq(new_share_fragments, lagrange)
-        .map(|(y_j, l)| y_j.mul(l.into_repr()));
+    let prods = zip_eq(updated_private_shares, lagrange)
+        .map(|(y_j, l)| y_j.private_key_share.mul(l.into_repr()));
     let y_r = prods.fold(E::G2Projective::zero(), |acc, y_j| acc + y_j);
 
     PrivateKeyShare {
@@ -86,9 +89,6 @@ pub fn refresh_private_key_share<E: PairingEngine>(
     polynomial: &DensePolynomial<E::Fr>,
     validator_private_key_share: &PrivateKeyShare<E>,
 ) -> PrivateKeyShare<E> {
-    // let h_g2 = E::G2Projective::from(participant.setup_params.h);
-    // let domain_point =
-    //     participant.public_decryption_contexts[participant.index].domain;
     let evaluated_polynomial = polynomial.evaluate(domain_point);
     let share_update = h.mul(evaluated_polynomial.into_repr());
     let updated_share = validator_private_key_share

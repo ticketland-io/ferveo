@@ -611,7 +611,7 @@ mod tests {
             .iter()
             .map(|ctxt| ctxt.domain)
             .collect::<Vec<_>>();
-        let new_private_key_share = recover_share_from_fragments(
+        let new_private_key_share = recover_share_from_updated_private_shares(
             &x_r,
             domain_points,
             &new_share_fragments,
@@ -719,7 +719,7 @@ mod tests {
             .iter()
             .map(|ctxt| ctxt.domain)
             .collect::<Vec<_>>();
-        let new_private_key_share = recover_share_from_fragments(
+        let new_private_key_share = recover_share_from_updated_private_shares(
             &x_r,
             domain_points,
             &new_share_fragments,

@@ -1,5 +1,4 @@
 #![allow(non_snake_case)]
-#![allow(dead_code)]
 
 use crate::*;
 use ark_ec::ProjectiveCurve;
@@ -12,7 +11,8 @@ pub fn prepare_combine_fast<E: PairingEngine>(
     let mut n_0 = E::Fr::one();
     for d_i in shares.iter() {
         domain.push(public_decryption_contexts[d_i.decrypter_index].domain);
-        n_0 *= public_decryption_contexts[d_i.decrypter_index].lagrange_n_0; // n_0_i = 1 * t^1 * t^2 ...
+        // n_0_i = 1 * t^1 * t^2 ...
+        n_0 *= public_decryption_contexts[d_i.decrypter_index].lagrange_n_0;
     }
     let s = SubproductDomain::<E::Fr>::new(domain);
     let mut lagrange = s.inverse_lagrange_coefficients(); // 1/L_i
@@ -105,16 +105,13 @@ pub fn share_combine_simple<E: PairingEngine>(
     decryption_shares: &[DecryptionShareSimple<E>],
     lagrange_coeffs: &[E::Fr],
 ) -> E::Fqk {
-    let mut product_of_shares = E::Fqk::one();
-
     // Sum of C_i^{L_i}z
-    for (c_i, alpha_i) in izip!(decryption_shares, lagrange_coeffs) {
-        // Exponentiation by alpha_i
-        let ss = c_i.decryption_share.pow(alpha_i.into_repr());
-        product_of_shares *= ss;
-    }
-
-    product_of_shares
+    izip!(decryption_shares, lagrange_coeffs).fold(
+        E::Fqk::one(),
+        |acc, (c_i, alpha_i)| {
+            acc * c_i.decryption_share.pow(alpha_i.into_repr())
+        },
+    )
 }
 
 #[cfg(test)]

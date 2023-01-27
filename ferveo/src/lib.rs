@@ -270,36 +270,33 @@ mod test_dkg_full {
         // Participants share updates and update their shares
         let pvss_aggregated = aggregate(&dkg);
 
-        assert_eq!(&validator_keypairs.len(), &dkg.validators.len());
-        let new_share_fragments: Vec<_> =
-            izip!(&validator_keypairs, &dkg.validators)
-                .enumerate()
-                .map(|(validator_index, (validator_keypair, _validator))| {
-                    let private_key_share = pvss_aggregated
-                        .decrypt_private_key_share(
-                            &validator_keypair.decryption_key,
-                            validator_index,
-                        );
-                    // Current participant receives updates from other participants
-                    let updates_for_participant: Vec<_> = share_updates
-                        .values()
-                        .map(|updates| *updates.get(validator_index).unwrap())
-                        .collect();
+        // Now, every participant separately:
+        let updated_shares: Vec<_> = validator_keypairs
+            .iter()
+            .enumerate()
+            .map(|(validator_index, validator_keypair)| {
+                // Receives updates from other participants
+                let updates_for_participant: Vec<_> = share_updates
+                    .values()
+                    .map(|updates| *updates.get(validator_index).unwrap())
+                    .collect();
 
-                    // And updates their share
-                    tpke::update_share_for_recovery::<E>(
-                        &private_key_share,
-                        &updates_for_participant,
-                    )
-                })
-                .collect();
+                // Creates updated private key shares
+                pvss_aggregated.update_private_key_share_for_recovery(
+                    &validator_keypair.decryption_key,
+                    validator_index,
+                    &updates_for_participant,
+                )
+            })
+            .collect();
 
         // Now, we have to combine new share fragments into a new share
-        let new_private_key_share = tpke::recover_share_from_fragments(
-            &x_r,
-            &domain_points,
-            &new_share_fragments,
-        );
+        let new_private_key_share =
+            tpke::recover_share_from_updated_private_shares(
+                &x_r,
+                &domain_points,
+                &updated_shares,
+            );
 
         // Get decryption shares from remaining participants
         let mut decryption_shares: Vec<DecryptionShareSimple<E>> =
@@ -388,6 +385,8 @@ mod test_dkg_full {
 
         // Create a new shared secret
         let domain = &dkg.domain.elements().collect::<Vec<_>>();
+        // TODO: Combine `tpke::prepare_combine_simple` and `tpke::share_combine_simple` into
+        //  one function and expose it in the tpke::api?
         let lagrange_coeffs = tpke::prepare_combine_simple::<E>(domain);
         let new_shared_secret = tpke::share_combine_simple::<E>(
             &new_decryption_shares,

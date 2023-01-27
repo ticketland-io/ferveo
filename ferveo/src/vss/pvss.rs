@@ -9,8 +9,8 @@ use ark_ff::UniformRand;
 use ark_serialize::*;
 use ferveo_common::{Keypair, PublicKey};
 use group_threshold_cryptography::{
-    refresh_private_key_share, Ciphertext, DecryptionShareFast,
-    DecryptionShareSimple, PrivateKeyShare,
+    refresh_private_key_share, update_share_for_recovery, Ciphertext,
+    DecryptionShareFast, DecryptionShareSimple, PrivateKeyShare,
 };
 use itertools::{zip_eq, Itertools};
 use subproductdomain::fast_multiexp;
@@ -263,6 +263,22 @@ impl<E: PairingEngine, T: Aggregate> PubliclyVerifiableSS<E, T> {
             aad,
         )
         .unwrap() // TODO: Add proper error handling
+    }
+
+    pub fn update_private_key_share_for_recovery(
+        &self,
+        validator_decryption_key: &E::Fr,
+        validator_index: usize,
+        share_updates: &[E::G2Projective],
+    ) -> PrivateKeyShare<E> {
+        // Retrieves their private key share
+        let private_key_share = self.decrypt_private_key_share(
+            validator_decryption_key,
+            validator_index,
+        );
+
+        // And updates their share
+        update_share_for_recovery::<E>(&private_key_share, share_updates)
     }
 }
 
