@@ -40,6 +40,7 @@ ark-ed-on-bls12-381 = "0.3.0"
 group-threshold-cryptography = { path = "../tpke" }
 ferveo-common = { path = "../ferveo-common" }
 subproductdomain = { path = "../subproductdomain" }
+rand_core = "0.6.4"
 
 [dependencies.digest]
 version = "0.10.0"
