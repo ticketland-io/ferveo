@@ -1,33 +1,43 @@
 use ark_serialize::CanonicalSerialize;
+use std::collections::BTreeSet;
 
 use ark_bls12_381::Bls12_381 as EllipticCurve;
 use ferveo::*;
 use ferveo_common::ExternalValidator;
+use itertools::iproduct;
 use rand::prelude::StdRng;
 use rand_core::SeedableRng;
 use std::fs::{create_dir_all, OpenOptions};
 use std::io::prelude::*;
-use std::path::Path;
+use std::path::PathBuf;
 
-pub fn save_data(threshold: usize, shares_num: usize, transcript_size: usize) {
-    let dir_path = Path::new("/tmp/benchmark_setup");
+const OUTPUT_DIR_PATH: &str = "/tmp/benchmark_setup";
+const OUTPUT_FILE_NAME: &str = "results.md";
+
+pub fn create_or_truncate_output_file() -> std::io::Result<()> {
+    let file_path = PathBuf::from(OUTPUT_DIR_PATH).join(OUTPUT_FILE_NAME);
+    eprintln!("Creating output file at {}", file_path.display());
+
+    let dir_path = PathBuf::from(OUTPUT_DIR_PATH);
     create_dir_all(dir_path).unwrap();
-    let file_path = dir_path.join("results.md");
 
-    if !file_path.exists() {
-        eprintln!("Creating a new file: {}", file_path.display());
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(&file_path)
-            .unwrap();
-        writeln!(file, "|threshold|shares_num|pvss_transcript_size|",).unwrap();
-        writeln!(file, "|---|---|---|",).unwrap();
-    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(file_path)?;
+    file.sync_all()?;
+
+    writeln!(file, "|shares_num|threshold|pvss_transcript_size|",)?;
+    writeln!(file, "|---|---|---|---|")
+}
+
+pub fn save_data(shares_num: usize, threshold: usize, transcript_size: usize) {
+    let file_path = PathBuf::from(OUTPUT_DIR_PATH).join(OUTPUT_FILE_NAME);
 
     eprintln!("Appending to file: {}", file_path.display());
     let mut file = OpenOptions::new().append(true).open(&file_path).unwrap();
-    writeln!(file, "|{}|{}|{}|", threshold, shares_num, transcript_size,)
+    writeln!(file, "{}|{}|{}|", shares_num, threshold, transcript_size)
         .unwrap();
 }
 
@@ -54,6 +64,7 @@ fn gen_validators(
 fn setup_dkg(
     validator: usize,
     shares_num: u32,
+    security_threshold: u32,
 ) -> PubliclyVerifiableDkg<EllipticCurve> {
     let keypairs = gen_keypairs(shares_num);
     let validators = gen_validators(&keypairs);
@@ -62,7 +73,7 @@ fn setup_dkg(
         validators,
         Params {
             tau: 0,
-            security_threshold: shares_num / 3,
+            security_threshold,
             shares_num,
             retry_after: 1,
         },
@@ -74,15 +85,16 @@ fn setup_dkg(
 
 fn setup(
     shares_num: u32,
+    security_threshold: u32,
     rng: &mut StdRng,
 ) -> PubliclyVerifiableDkg<EllipticCurve> {
     let mut transcripts = vec![];
     for i in 0..shares_num {
-        let mut dkg = setup_dkg(i as usize, shares_num);
+        let mut dkg = setup_dkg(i as usize, shares_num, security_threshold);
         transcripts.push(dkg.share(rng).expect("Test failed"));
     }
 
-    let mut dkg = setup_dkg(0, shares_num);
+    let mut dkg = setup_dkg(0, shares_num, security_threshold);
     for (sender, pvss) in transcripts.into_iter().enumerate() {
         dkg.apply_message(dkg.validators[sender].validator.clone(), pvss)
             .expect("Setup failed");
@@ -93,14 +105,31 @@ fn setup(
 fn main() {
     let rng = &mut StdRng::seed_from_u64(0);
 
-    for shares_num in [2, 4, 8, 16, 32, 64] {
-        let dkg = setup(shares_num as u32, rng);
+    create_or_truncate_output_file().unwrap();
+
+    let share_num_vec = [2, 4, 8, 16, 32, 64];
+    let threshold_ratio_vec = [0.51, 0.66, 0.8, 1.0];
+
+    // Create benchmark parameters without duplicates
+    let configs = iproduct!(&share_num_vec, &threshold_ratio_vec)
+        .map(|(shares_num, threshold_ratio)| {
+            let threshold =
+                (*shares_num as f64 * threshold_ratio).ceil() as u32;
+            (shares_num, threshold)
+        })
+        .collect::<BTreeSet<_>>();
+
+    println!("Running benchmarks for {:?}", configs);
+
+    for (shares_num, threshold) in configs {
+        println!("shares_num: {}, threshold: {}", shares_num, threshold);
+        let dkg = setup(*shares_num as u32, threshold, rng);
         let mut transcript_bytes = vec![];
         dkg.vss[&0].serialize(&mut transcript_bytes).unwrap();
 
         save_data(
-            dkg.params.security_threshold as usize,
-            shares_num,
+            threshold as usize,
+            *shares_num as usize,
             transcript_bytes.len(),
         );
     }
