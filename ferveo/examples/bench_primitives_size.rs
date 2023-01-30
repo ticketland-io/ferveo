@@ -28,17 +28,25 @@ pub fn create_or_truncate_output_file() -> std::io::Result<()> {
         .open(file_path)?;
     file.sync_all()?;
 
-    writeln!(file, "|shares_num|threshold|pvss_transcript_size|",)?;
+    writeln!(file, "|shares_num|threshold|pvss_transcript_size_bytes|",)?;
     writeln!(file, "|---|---|---|---|")
 }
 
-pub fn save_data(shares_num: usize, threshold: usize, transcript_size: usize) {
+pub fn save_data(
+    shares_num: usize,
+    threshold: usize,
+    transcript_size_bytes: usize,
+) {
     let file_path = PathBuf::from(OUTPUT_DIR_PATH).join(OUTPUT_FILE_NAME);
 
     eprintln!("Appending to file: {}", file_path.display());
     let mut file = OpenOptions::new().append(true).open(&file_path).unwrap();
-    writeln!(file, "{}|{}|{}|", shares_num, threshold, transcript_size)
-        .unwrap();
+    writeln!(
+        file,
+        "{}|{}|{}|",
+        shares_num, threshold, transcript_size_bytes
+    )
+    .unwrap();
 }
 
 // TODO: Find a way to deduplicate the following methods with benchmarks and test setup
