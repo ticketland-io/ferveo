@@ -37,13 +37,12 @@ pub fn prepare_combine_fast<E: PairingEngine>(
 pub fn prepare_combine_simple<E: PairingEngine>(
     domain: &[E::Fr],
 ) -> Vec<E::Fr> {
-    // See https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
     // In this formula x_i = 0, hence numerator is x_m
+    // See https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
     lagrange_basis_at::<E>(domain, &E::Fr::zero())
 }
 
 /// Calculate lagrange coefficients using optimized formula
-/// See https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
 pub fn lagrange_basis_at<E: PairingEngine>(
     shares_x: &[E::Fr],
     x_i: &E::Fr,
@@ -116,6 +115,15 @@ pub fn share_combine_simple<E: PairingEngine>(
     }
 
     product_of_shares
+}
+
+pub fn share_combine_simple_precomputed<E: PairingEngine>(
+    shares: &[DecryptionShareSimplePrecomputed<E>],
+) -> E::Fqk {
+    // s = ∏ C_{λ_i}, where λ_i is the Lagrange coefficient for i
+    shares
+        .iter()
+        .fold(E::Fqk::one(), |acc, c_i| acc * c_i.decryption_share)
 }
 
 #[cfg(test)]

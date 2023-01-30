@@ -1,3 +1,5 @@
+#![allow(clippy::redundant_closure)]
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 pub fn bench_encrypt_combine(c: &mut Criterion) {
@@ -55,14 +57,12 @@ pub fn bench_encrypt_combine(c: &mut Criterion) {
         let encrypt_fn = bench_encrypt(*num_shares, *num_shares);
         group.measurement_time(core::time::Duration::new(45, 0));
         group.bench_function(format!("tpke-wasm::encrypt - num_shares={}, num_entities={}, threshold={}", num_shares, num_shares, num_shares), |b| {
-            #[allow(clippy::redundant_closure)]
             b.iter(|| encrypt_fn())
         });
 
         let combine_fn = bench_combine(*num_shares, *num_shares);
         group.measurement_time(core::time::Duration::new(45, 0));
         group.bench_function(format!("tpke-wasm::combine - num_shares={}, num_entities={}, threshold={}", num_shares, num_shares, num_shares), |b| {
-            #[allow(clippy::redundant_closure)]
             b.iter(|| combine_fn())
         });
     }
