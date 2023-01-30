@@ -1,5 +1,6 @@
 use crate::*;
 use ark_ec::ProjectiveCurve;
+
 use itertools::zip_eq;
 
 #[derive(Debug, Clone)]
@@ -99,7 +100,7 @@ impl<E: PairingEngine> DecryptionShareSimple<E> {
     }
 }
 
-// TODO: Remove this code? Currently unused.
+// TODO: Remove this code? Currently only used in benchmarks.
 pub fn batch_verify_decryption_shares<R: RngCore, E: PairingEngine>(
     pub_contexts: &[PublicDecryptionContextFast<E>],
     ciphertexts: &[Ciphertext<E>],
@@ -163,6 +164,7 @@ pub fn batch_verify_decryption_shares<R: RngCore, E: PairingEngine>(
     E::product_of_pairings(&pairings) == E::Fqk::one()
 }
 
+// TODO: Benchmark this
 pub fn verify_decryption_shares_fast<E: PairingEngine>(
     pub_contexts: &[PublicDecryptionContextFast<E>],
     ciphertext: &Ciphertext<E>,
@@ -221,6 +223,12 @@ pub fn verify_decryption_shares_simple<E: PairingEngine>(
         }
     }
     true
+}
+
+#[derive(Debug, Clone)]
+pub struct DecryptionShareSimplePrecomputed<E: PairingEngine> {
+    pub decrypter_index: usize,
+    pub decryption_share: E::Fqk,
 }
 
 #[cfg(test)]

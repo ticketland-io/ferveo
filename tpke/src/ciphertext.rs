@@ -13,12 +13,9 @@ use crate::{construct_tag_hash, hash_to_g2};
 
 #[derive(Clone, Debug)]
 pub struct Ciphertext<E: PairingEngine> {
-    // U
-    pub auth_tag: E::G2Affine,
-    // W
-    pub ciphertext: Vec<u8>,
-    // V
-    pub commitment: E::G1Affine,
+    pub commitment: E::G1Affine, // U
+    pub auth_tag: E::G2Affine,   // W
+    pub ciphertext: Vec<u8>,     // V
 }
 
 impl<E: PairingEngine> Ciphertext<E> {

@@ -294,7 +294,6 @@ pub(crate) mod test_common {
         my_index: usize,
     ) -> PubliclyVerifiableDkg<EllipticCurve> {
         let keypairs = gen_n_keypairs(shares_num);
-        for _keypair in &keypairs {}
         let validators = gen_n_validators(&keypairs, shares_num);
         let me = validators[my_index].clone();
         PubliclyVerifiableDkg::new(
