@@ -1,5 +1,3 @@
-extern crate core;
-
 use crate::hash_to_curve::htp_bls12381_g2;
 use crate::SetupParams;
 
@@ -266,13 +264,6 @@ pub fn setup_simple<E: PairingEngine>(
     (pubkey.into(), privkey.into(), private_contexts)
 }
 
-pub fn generate_random<R: RngCore, E: PairingEngine>(
-    n: usize,
-    rng: &mut R,
-) -> Vec<E::Fr> {
-    (0..n).map(|_| E::Fr::rand(rng)).collect::<Vec<_>>()
-}
-
 #[cfg(test)]
 mod tests {
     use crate::*;
@@ -283,7 +274,7 @@ mod tests {
     use ark_ec::ProjectiveCurve;
     use ark_ff::BigInteger256;
     use ark_std::test_rng;
-
+    use itertools::Itertools;
     use rand::prelude::StdRng;
 
     type E = ark_bls12_381::Bls12_381;
@@ -473,6 +464,40 @@ mod tests {
             &contexts[0].public_decryption_contexts,
             &decryption_shares,
         );
+
+        test_ciphertext_validation_fails(msg, aad, &ciphertext, &shared_secret);
+    }
+
+    #[test]
+    fn simple_threshold_decryption_precomputed() {
+        let mut rng = &mut test_rng();
+        let threshold = 16 * 2 / 3;
+        let shares_num = 16;
+        let msg: &[u8] = "abc".as_bytes();
+        let aad: &[u8] = "my-aad".as_bytes();
+
+        let (pubkey, _, contexts) =
+            setup_simple::<E>(threshold, shares_num, &mut rng);
+
+        let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
+
+        let domain = contexts[0]
+            .public_decryption_contexts
+            .iter()
+            .map(|c| c.domain)
+            .collect::<Vec<_>>();
+        let lagrange_coeffs = prepare_combine_simple::<E>(&domain);
+
+        let decryption_shares: Vec<_> = contexts
+            .iter()
+            .zip_eq(lagrange_coeffs.iter())
+            .map(|(context, lagrange_coeff)| {
+                context.create_share_precomputed(&ciphertext, lagrange_coeff)
+            })
+            .collect();
+
+        let shared_secret =
+            share_combine_simple_precomputed::<E>(&decryption_shares);
 
         test_ciphertext_validation_fails(msg, aad, &ciphertext, &shared_secret);
     }

@@ -263,17 +263,11 @@ pub fn bench_random_poly(c: &mut Criterion) {
         };
         group.bench_function(
             BenchmarkId::new("random_polynomial_ark", threshold),
-            |b| {
-                #[allow(clippy::redundant_closure)]
-                b.iter(|| ark())
-            },
+            |b| b.iter(|| ark()),
         );
         group.bench_function(
             BenchmarkId::new("random_polynomial_naive", threshold),
-            |b| {
-                #[allow(clippy::redundant_closure)]
-                b.iter(|| naive())
-            },
+            |b| b.iter(|| naive()),
         );
     }
 }

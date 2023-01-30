@@ -64,12 +64,13 @@ pub fn setup_dkg(
     let keypairs = gen_keypairs(num);
     let validators = gen_validators(&keypairs);
     let me = validators[validator].clone();
+    let shares_num = 300;
     PubliclyVerifiableDkg::new(
         validators,
         Params {
             tau: 0,
-            security_threshold: 300 / 3,
-            shares_num: 300,
+            security_threshold: shares_num / 3,
+            shares_num,
             retry_after: 2,
         },
         &me,

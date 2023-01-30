@@ -14,6 +14,13 @@ pub struct BlindedKeyShare<E: PairingEngine> {
     pub blinding_key_prepared: E::G2Prepared,
 }
 
+pub fn generate_random<R: RngCore, E: PairingEngine>(
+    n: usize,
+    rng: &mut R,
+) -> Vec<E::Fr> {
+    (0..n).map(|_| E::Fr::rand(rng)).collect::<Vec<_>>()
+}
+
 impl<E: PairingEngine> BlindedKeyShare<E> {
     pub fn verify_blinding<R: RngCore>(
         &self,

@@ -83,4 +83,22 @@ impl<E: PairingEngine> PrivateDecryptionContextSimple<E> {
             aad,
         )
     }
+
+    pub fn create_share_precomputed(
+        &self,
+        ciphertext: &Ciphertext<E>,
+        lagrange_coeff: &E::Fr,
+    ) -> DecryptionShareSimplePrecomputed<E> {
+        let u = ciphertext.commitment;
+        // U_{λ_i} = [λ_{i}(0)] U
+        let u_to_lagrange_coeff = u.mul(lagrange_coeff.into_repr());
+        let z_i = self.private_key_share.private_key_share;
+        // C_{λ_i} = e(U_{λ_i}, Z_i)
+        let c_i = E::pairing(u_to_lagrange_coeff, z_i);
+
+        DecryptionShareSimplePrecomputed {
+            decrypter_index: self.index,
+            decryption_share: c_i,
+        }
+    }
 }

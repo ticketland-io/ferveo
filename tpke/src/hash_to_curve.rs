@@ -7,7 +7,6 @@ use ark_serialize::CanonicalDeserialize;
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::dbig::DBIG;
 use miracl_core::bls12381::ecp;
-use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;
 use miracl_core::bls12381::fp::FP;
 use miracl_core::bls12381::fp2::FP2;
@@ -16,36 +15,6 @@ use miracl_core::hmac;
 
 fn ceil(a: usize, b: usize) -> usize {
     (a - 1) / b + 1
-}
-
-#[allow(dead_code)]
-fn hash_to_field_bls12381(
-    hash: usize,
-    hlen: usize,
-    dst: &[u8],
-    msg: &[u8],
-    ctr: usize,
-) -> [miracl_core::bls12381::fp::FP; 2] {
-    let mut u: [FP; 2] = [FP::new(), FP::new()];
-
-    let q = BIG::new_ints(&rom::MODULUS);
-    let k = q.nbits();
-    let r = BIG::new_ints(&rom::CURVE_ORDER);
-    let m = r.nbits();
-    let L = ceil(k + ceil(m, 2), 8);
-    let mut okm: [u8; 512] = [0; 512];
-    hmac::xmd_expand(hash, hlen, &mut okm, L * ctr, dst, msg);
-    let mut fd: [u8; 256] = [0; 256];
-    for i in 0..ctr {
-        for j in 0..L {
-            fd[j] = okm[i * L + j];
-        }
-        let mut dx = DBIG::frombytes(&fd[0..L]);
-        let w = FP::new_big(&dx.dmod(&q));
-        u[i].copy(&w);
-    }
-
-    u
 }
 
 fn hash_to_field2_bls12381(
@@ -82,29 +51,6 @@ fn hash_to_field2_bls12381(
     u
 }
 
-#[allow(dead_code)]
-pub fn htp_bls12381_g1(msg: &[u8]) -> ark_bls12_381::G1Affine {
-    let dst = "QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_".as_bytes();
-    let u = hash_to_field_bls12381(hmac::MC_SHA2, ecp::HASH_TYPE, dst, msg, 2);
-    let mut P = ECP::map2point(&u[0]);
-    let P1 = ECP::map2point(&u[1]);
-    P.add(&P1);
-    P.cfp();
-    P.affine();
-    /* For arcane reasons, miracl_core uses an extra leading byte,
-    which is always set to either 0x02 or 0x03 for compressed representations,
-    and set to 0x04 for uncompressed representations. */
-
-    let mut compressed = [0u8; 49];
-    P.tobytes(&mut compressed, true);
-
-    let mut compressed_rev = [0u8; 48];
-    compressed_rev.clone_from_slice(&compressed[1..]);
-    compressed_rev[000..=047].reverse();
-
-    ark_bls12_381::G1Affine::deserialize(&compressed_rev[..]).unwrap()
-}
-
 pub fn htp_bls12381_g2(msg: &[u8]) -> ark_bls12_381::G2Affine {
     let dst = "QUUX-V01-CS02-with-BLS12381G2_XMD:SHA-256_SSWU_RO_".as_bytes();
     let u = hash_to_field2_bls12381(hmac::MC_SHA2, ecp::HASH_TYPE, dst, msg, 2);
@@ -134,24 +80,6 @@ pub fn htp_bls12381_g2(msg: &[u8]) -> ark_bls12_381::G2Affine {
 mod tests {
     use super::*;
 
-    fn test_hash_to_g1(msg: &[u8], expected_hex_string: &str) {
-        let mut expected_compressed = [0u8; 48];
-        hex::decode_to_slice(expected_hex_string, &mut expected_compressed)
-            .expect("Failed to decode hex");
-
-        let mut expected_compressed_rev = expected_compressed;
-        expected_compressed_rev[0] &= (1 << 5) - 1;
-        expected_compressed_rev.reverse();
-
-        let expected =
-            ark_bls12_381::G1Affine::deserialize(&expected_compressed_rev[..])
-                .unwrap();
-
-        let res = htp_bls12381_g1(msg);
-
-        assert!(res == expected)
-    }
-
     fn test_hash_to_g2(msg: &[u8], expected_hex_string: &str) {
         let mut expected_compressed = [0u8; 96];
         hex::decode_to_slice(expected_hex_string, &mut expected_compressed)
@@ -168,22 +96,6 @@ mod tests {
         let res = htp_bls12381_g2(msg);
 
         assert!(res == expected)
-    }
-
-    #[test]
-    fn hash_nothing_g1() {
-        let msg = b"";
-        let expected_hex_string =
-            "852926add2207b76ca4fa57a8734416c8dc95e24501772c814278700eed6d1e4e8cf62d9c09db0fac349612b759e79a1";
-        test_hash_to_g1(msg, expected_hex_string)
-    }
-
-    #[test]
-    fn hash_abc_g1() {
-        let msg = b"abc";
-        let expected_hex_string =
-            "83567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a7943388a49a3aee664ba5379a7655d3c68900be2f6903";
-        test_hash_to_g1(msg, expected_hex_string)
     }
 
     #[test]
