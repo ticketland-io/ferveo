@@ -106,8 +106,8 @@ pub fn encrypt<R: RngCore, E: PairingEngine>(
 pub fn check_ciphertext_validity<E: PairingEngine>(
     c: &Ciphertext<E>,
     aad: &[u8],
+    g_inv: &E::G1Prepared,
 ) -> Result<()> {
-    let g_inv = E::G1Prepared::from(-E::G1Affine::prime_subgroup_generator());
     // H_G2(U, aad)
     let hash_g2 = E::G2Prepared::from(construct_tag_hash::<E>(
         c.commitment,
@@ -118,7 +118,7 @@ pub fn check_ciphertext_validity<E: PairingEngine>(
     let is_ciphertext_valid = E::product_of_pairings(&[
         // e(U, H_G2(U, aad)) = e(G, W)
         (E::G1Prepared::from(c.commitment), hash_g2),
-        (g_inv, E::G2Prepared::from(c.auth_tag)),
+        (g_inv.clone(), E::G2Prepared::from(c.auth_tag)),
     ]) == E::Fqk::one();
 
     if is_ciphertext_valid {
@@ -131,12 +131,13 @@ pub fn check_ciphertext_validity<E: PairingEngine>(
 pub fn checked_decrypt<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     aad: &[u8],
-    privkey: E::G2Affine,
+    g_inv: &E::G1Prepared,
+    privkey: &E::G2Affine,
 ) -> Result<Vec<u8>> {
-    check_ciphertext_validity(ciphertext, aad)?;
+    check_ciphertext_validity(ciphertext, aad, g_inv)?;
     let s = E::product_of_pairings(&[(
         E::G1Prepared::from(ciphertext.commitment),
-        E::G2Prepared::from(privkey),
+        E::G2Prepared::from(*privkey),
     )]);
     Ok(decrypt_with_shared_secret(ciphertext, &s))
 }
@@ -157,9 +158,10 @@ fn decrypt_with_shared_secret<E: PairingEngine>(
 pub fn checked_decrypt_with_shared_secret<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     aad: &[u8],
+    g_inv: &E::G1Prepared,
     s: &E::Fqk,
 ) -> Result<Vec<u8>> {
-    check_ciphertext_validity(ciphertext, aad)?;
+    check_ciphertext_validity(ciphertext, aad, g_inv)?;
     Ok(decrypt_with_shared_secret(ciphertext, s))
 }
 

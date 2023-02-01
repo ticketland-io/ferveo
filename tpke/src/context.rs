@@ -41,8 +41,9 @@ impl<E: PairingEngine> PrivateDecryptionContextFast<E> {
         &self,
         ciphertext: &Ciphertext<E>,
         aad: &[u8],
+        g_inv: &E::G1Prepared,
     ) -> Result<DecryptionShareFast<E>> {
-        check_ciphertext_validity::<E>(ciphertext, aad)?;
+        check_ciphertext_validity::<E>(ciphertext, aad, g_inv)?;
 
         let decryption_share = ciphertext
             .commitment
@@ -70,8 +71,9 @@ impl<E: PairingEngine> PrivateDecryptionContextSimple<E> {
         &self,
         ciphertext: &Ciphertext<E>,
         aad: &[u8],
+        g_inv: &E::G1Prepared,
     ) -> Result<DecryptionShareSimple<E>> {
-        check_ciphertext_validity::<E>(ciphertext, aad)?;
+        check_ciphertext_validity::<E>(ciphertext, aad, g_inv)?;
 
         let u = ciphertext.commitment;
         let z_i = self.private_key_share.private_key_share;
