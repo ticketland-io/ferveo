@@ -1,7 +1,8 @@
 #![allow(non_snake_case)]
-#![allow(dead_code)]
 
 use crate::*;
+
+use itertools::zip_eq;
 
 #[derive(Debug, Clone)]
 pub struct DecryptionShareFast<E: PairingEngine> {
@@ -40,6 +41,42 @@ impl<E: PairingEngine> DecryptionShareFast<E> {
 pub struct DecryptionShareSimple<E: PairingEngine> {
     pub decrypter_index: usize,
     pub decryption_share: E::Fqk,
+}
+
+// TODO: Benchmark this
+pub fn verify_decryption_shares_fast<E: PairingEngine>(
+    pub_contexts: &[PublicDecryptionContextFast<E>],
+    ciphertext: &Ciphertext<E>,
+    decryption_shares: &[DecryptionShareFast<E>],
+) -> bool {
+    // [b_i] H
+    let blinding_keys = decryption_shares
+        .iter()
+        .map(|d| {
+            pub_contexts[d.decrypter_index]
+                .blinded_key_share
+                .blinding_key_prepared
+                .clone()
+        })
+        .collect::<Vec<_>>();
+
+    // e(U, -H)
+    let pairing_a = (
+        E::G1Prepared::from(ciphertext.commitment),
+        pub_contexts[0].h_inv.clone(),
+    );
+
+    for (d_i, p_i) in zip_eq(decryption_shares, blinding_keys) {
+        // e(D_i, B_i)
+        let pairing_b = (E::G1Prepared::from(d_i.decryption_share), p_i);
+        if E::product_of_pairings(&[pairing_a.clone(), pairing_b.clone()])
+            != E::Fqk::one()
+        {
+            return false;
+        }
+    }
+
+    true
 }
 
 #[derive(Debug, Clone)]

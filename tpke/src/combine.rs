@@ -16,9 +16,11 @@ pub fn prepare_combine_fast<E: PairingEngine>(
     }
     let s = SubproductDomain::<E::Fr>::new(domain);
     let mut lagrange = s.inverse_lagrange_coefficients(); // 1/L_i
-                                                          // Given a vector of field elements {v_i}, compute the vector {coeff * v_i^(-1)}
+
+    // Given a vector of field elements {v_i}, compute the vector {coeff * v_i^(-1)}
     ark_ff::batch_inversion_and_mul(&mut lagrange, &n_0); // n_0 * L_i
-                                                          // L_i * [b]Z_i
+
+    // L_i * [b]Z_i
     izip!(shares.iter(), lagrange.iter())
         .map(|(d_i, lambda)| {
             let decrypter = &public_decryption_contexts[d_i.decrypter_index];
@@ -58,6 +60,7 @@ pub fn lagrange_basis_at<E: PairingEngine>(
     lagrange_coeffs
 }
 
+// TODO: Hide this from external users. Currently blocked by usage in benchmarks.
 pub fn share_combine_fast<E: PairingEngine>(
     shares: &[DecryptionShareFast<E>],
     prepared_key_shares: &[E::G2Prepared],
@@ -78,14 +81,34 @@ pub fn share_combine_fast<E: PairingEngine>(
     E::product_of_pairings(&pairing_product)
 }
 
+pub fn checked_share_combine_fast<E: PairingEngine>(
+    pub_contexts: &[PublicDecryptionContextFast<E>],
+    ciphertext: &Ciphertext<E>,
+    decryption_shares: &[DecryptionShareFast<E>],
+    prepared_key_shares: &[E::G2Prepared],
+) -> Result<E::Fqk> {
+    let is_valid_shares = verify_decryption_shares_fast(
+        pub_contexts,
+        ciphertext,
+        decryption_shares,
+    );
+    if !is_valid_shares {
+        return Err(
+            ThresholdEncryptionError::DecryptionShareVerificationFailed,
+        );
+    }
+    Ok(share_combine_fast(decryption_shares, prepared_key_shares))
+}
+
+// TODO: Hide this from external users. Currently blocked by usage in benchmarks.
 pub fn share_combine_simple<E: PairingEngine>(
-    shares: &[DecryptionShareSimple<E>],
+    decryption_shares: &[DecryptionShareSimple<E>],
     lagrange_coeffs: &[E::Fr],
 ) -> E::Fqk {
     let mut product_of_shares = E::Fqk::one();
 
     // Sum of C_i^{L_i}z
-    for (c_i, alpha_i) in izip!(shares, lagrange_coeffs) {
+    for (c_i, alpha_i) in izip!(decryption_shares, lagrange_coeffs) {
         // Exponentiation by alpha_i
         let ss = c_i.decryption_share.pow(alpha_i.into_repr());
         product_of_shares *= ss;

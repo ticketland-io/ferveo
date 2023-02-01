@@ -6,9 +6,7 @@ use ark_ec::{
     prepare_g1, prepare_g2, AffineCurve, PairingEngine, ProjectiveCurve,
 };
 use ark_ff::{BigInteger256, Field, One, UniformRand, Zero};
-use criterion::{
-    black_box, criterion_group, criterion_main, BenchmarkId, Criterion,
-};
+use criterion::{black_box, criterion_group, BenchmarkId, Criterion};
 
 use group_threshold_cryptography::make_random_polynomial_at;
 use itertools::izip;
@@ -288,4 +286,5 @@ criterion_group!(
     bench_random_poly,
 );
 
-criterion_main!(benches);
+// Hide this benchmark from boa-dev/criterion-compare-action@v3
+// criterion_main!(benches);

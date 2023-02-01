@@ -41,10 +41,11 @@ name = "tpke"
 path = "benches/tpke.rs"
 harness = false
 
-[[bench]]
-name = "arkworks"
-path = "benches/arkworks.rs"
-harness = false
+# Hide this benchmark from boa-dev/criterion-compare-action@v3
+#[[bench]]
+#name = "arkworks"
+#path = "benches/arkworks.rs"
+#harness = false
 
 [profile.release]
 opt-level = 3

@@ -120,7 +120,7 @@ fn threshold_encryption() {
     for share in decryption_shares {
         ss_builder.add_decryption_share(&share);
     }
-    let shared_secret = ss_builder.build();
+    let shared_secret = ss_builder.build(&ciphertext);
 
     // Decrypt the message
     let plaintext = decrypt_with_shared_secret(&ciphertext, &shared_secret);

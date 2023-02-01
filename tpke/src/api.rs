@@ -132,7 +132,7 @@ impl ParticipantPayload {
     }
 
     pub fn to_decryption_share(&self) -> DecryptionShare {
-        // TODO: Add verification steps
+        // TODO: Update how decryption share is constructed in this API
         let decryption_share = self
             .ciphertext
             .commitment

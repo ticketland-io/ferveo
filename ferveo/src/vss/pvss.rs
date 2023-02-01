@@ -41,6 +41,12 @@ pub struct PubliclyVerifiableParams<E: PairingEngine> {
     pub h: E::G2Projective,
 }
 
+impl<E: PairingEngine> PubliclyVerifiableParams<E> {
+    pub fn g_inv(&self) -> E::G1Prepared {
+        E::G1Prepared::from(-self.g.into_affine())
+    }
+}
+
 /// Each validator posts a transcript to the chain. Once enough
 /// validators have done this (their total voting power exceeds
 /// 2/3 the total), this will be aggregated into a final key
@@ -128,6 +134,8 @@ impl<E: PairingEngine, T> PubliclyVerifiableSS<E, T> {
 
     /// Part of checking the validity of an aggregated PVSS transcript
     ///
+    /// Implements check #4 in 4.2.3 section of https://eprint.iacr.org/2022/898.pdf
+    ///
     /// If aggregation fails, a validator needs to know that their pvss
     /// transcript was at fault so that the can issue a new one. This
     /// function may also be used for that purpose.
@@ -138,26 +146,25 @@ impl<E: PairingEngine, T> PubliclyVerifiableSS<E, T> {
         dkg.domain.fft_in_place(&mut commitment);
 
         // Each validator checks that their share is correct
-        dkg.validators.iter().zip(self.shares.iter()).all(
-            |(validator, share)| {
-                // ek is the public key of the validator
-                // TODO: Is that the ek = [dk]H key?
-                let ek = validator
+        dkg.validators
+            .iter()
+            .zip(self.shares.iter())
+            .all(|(validator, y_i)| {
+                // TODO: Check #3 is missing
+                // See #3 in 4.2.3 section of https://eprint.iacr.org/2022/898.pdf
+
+                // Validator checks checks aggregated shares against commitment
+                let ek_i = validator
                     .validator
                     .public_key
                     .encryption_key
                     .into_projective();
-                // Validator checks checks aggregated shares against commitment
-                // TODO: Check #3 is missing
-                // See #3 in 4.2.3 section of https://eprint.iacr.org/2022/898.pdf
-                let y = *share;
-                let a = commitment[validator.share_index];
-                // We verify that e(G, Y_j) = e(A_j, ek_j) for all j
+                let a_i = commitment[validator.share_index];
+                // We verify that e(G, Y_i) = e(A_i, ek_i) for validator i
                 // See #4 in 4.2.3 section of https://eprint.iacr.org/2022/898.pdf
                 // e(G,Y) = e(A, ek)
-                E::pairing(dkg.pvss_params.g, y) == E::pairing(a, ek)
-            },
-        )
+                E::pairing(dkg.pvss_params.g, *y_i) == E::pairing(a_i, ek_i)
+            })
     }
 }
 
@@ -333,6 +340,28 @@ mod test_pvss {
 
         pvss.sigma = G2::zero();
         assert!(!pvss.verify_optimistic());
+    }
+
+    /// Check that if PVSS shares are tampered with, the full verification fails
+    #[test]
+    fn test_verify_pvss_bad_shares() {
+        let rng = &mut ark_std::test_rng();
+        let dkg = setup_dkg(0);
+        let s = Fr::rand(rng);
+        let pvss = Pvss::<EllipticCurve>::new(&s, &dkg, rng).unwrap();
+
+        // So far, everything works
+        assert!(pvss.verify_optimistic());
+        assert!(pvss.verify_full(&dkg));
+
+        // Now, we're going to tamper with the PVSS shares
+        let mut bad_pvss = pvss;
+        bad_pvss.shares[0] = G2::zero();
+
+        // Optimistic verification should not catch this issue
+        assert!(bad_pvss.verify_optimistic());
+        // Full verification should catch this issue
+        assert!(!bad_pvss.verify_full(&dkg));
     }
 
     /// Check that happy flow of aggregating PVSS transcripts

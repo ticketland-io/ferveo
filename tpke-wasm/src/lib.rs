@@ -2,6 +2,8 @@ mod utils;
 
 extern crate group_threshold_cryptography as tpke;
 
+use ark_bls12_381::G1Affine;
+use ark_ec::AffineCurve;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -18,6 +20,8 @@ pub type TpkeDecryptionShare = tpke::DecryptionShareFast<E>;
 pub type TpkePublicDecryptionContext = tpke::PublicDecryptionContextFast<E>;
 pub type TpkeSharedSecret =
     <ark_bls12_381::Bls12_381 as ark_ec::PairingEngine>::Fqk;
+pub type TpkeG1Prepared =
+    <ark_bls12_381::Bls12_381 as ark_ec::PairingEngine>::G1Prepared;
 
 #[wasm_bindgen]
 #[derive(Clone, Debug)]
@@ -222,6 +226,7 @@ impl Setup {
 pub struct Ciphertext {
     pub(crate) ciphertext: TpkeCiphertext,
     pub(crate) aad: Vec<u8>,
+    pub(crate) g_inv: TpkeG1Prepared,
 }
 
 #[wasm_bindgen]
@@ -233,11 +238,15 @@ pub fn encrypt(
     set_panic_hook();
 
     let mut rng = rand::thread_rng();
+    // TODO: Expose `TpkeG1Prepared` to WASM and use it here
+    let g_inv = TpkeG1Prepared::from(-G1Affine::prime_subgroup_generator());
     let ciphertext =
         tpke::encrypt::<_, E>(message, aad, &public_key.0, &mut rng);
+
     Ciphertext {
         ciphertext,
         aad: aad.to_vec(),
+        g_inv,
     }
 }
 
@@ -248,8 +257,10 @@ pub fn decrypt(ciphertext: &Ciphertext, private_key: &PrivateKey) -> Vec<u8> {
     tpke::checked_decrypt(
         &ciphertext.ciphertext,
         &ciphertext.aad,
-        private_key.0,
+        &ciphertext.g_inv,
+        &private_key.0,
     )
+    .unwrap()
 }
 
 #[wasm_bindgen]
@@ -279,7 +290,7 @@ impl SharedSecretBuilder {
     }
 
     #[wasm_bindgen]
-    pub fn build(&self) -> SharedSecret {
+    pub fn build(&self, ciphertext: &Ciphertext) -> SharedSecret {
         set_panic_hook();
 
         if self.shares.len() != self.contexts.len() {
@@ -288,10 +299,14 @@ impl SharedSecretBuilder {
 
         let prepared_blinded_key_shares =
             tpke::prepare_combine_fast(&self.contexts, &self.shares);
-        let shared_secret = tpke::share_combine_fast(
+
+        let shared_secret = tpke::checked_share_combine_fast(
+            &self.contexts,
+            &ciphertext.ciphertext,
             &self.shares,
             &prepared_blinded_key_shares,
-        );
+        )
+        .unwrap();
         SharedSecret(shared_secret)
     }
 }
@@ -306,6 +321,7 @@ pub fn decrypt_with_shared_secret(
     tpke::checked_decrypt_with_shared_secret(
         &ciphertext.ciphertext,
         &ciphertext.aad,
+        &ciphertext.g_inv,
         &shared_secret.0,
     )
     .unwrap()

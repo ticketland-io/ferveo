@@ -50,7 +50,15 @@ impl SetupFast {
 
         let mut decryption_shares: Vec<DecryptionShareFast<E>> = vec![];
         for context in contexts.iter() {
-            decryption_shares.push(context.create_share(&ciphertext));
+            decryption_shares.push(
+                context
+                    .create_share(
+                        &ciphertext,
+                        aad,
+                        &contexts[0].setup_params.g_inv,
+                    )
+                    .unwrap(),
+            );
         }
 
         let pub_contexts = contexts[0].clone().public_decryption_contexts;
@@ -104,7 +112,15 @@ impl SetupSimple {
         // Creating decryption shares
         let decryption_shares: Vec<_> = contexts
             .iter()
-            .map(|context| context.create_share(&ciphertext))
+            .map(|context| {
+                context
+                    .create_share(
+                        &ciphertext,
+                        aad,
+                        &contexts[0].setup_params.g_inv,
+                    )
+                    .unwrap()
+            })
             .collect();
 
         let pub_contexts = contexts[0].clone().public_decryption_contexts;
@@ -152,7 +168,13 @@ pub fn bench_create_decryption_share(c: &mut Criterion) {
                     setup
                         .contexts
                         .iter()
-                        .map(|ctx| ctx.create_share(&setup.shared.ciphertext))
+                        .map(|ctx| {
+                            ctx.create_share(
+                                &setup.shared.ciphertext,
+                                &setup.shared.aad,
+                                &setup.contexts[0].setup_params.g_inv,
+                            )
+                        })
                         .collect::<Vec<_>>()
                 })
             }
@@ -166,7 +188,13 @@ pub fn bench_create_decryption_share(c: &mut Criterion) {
                     setup
                         .contexts
                         .iter()
-                        .map(|ctx| ctx.create_share(&setup.shared.ciphertext))
+                        .map(|ctx| {
+                            ctx.create_share(
+                                &setup.shared.ciphertext,
+                                &setup.shared.aad,
+                                &setup.contexts[0].setup_params.g_inv,
+                            )
+                        })
                         .collect::<Vec<_>>()
                 })
             }
@@ -331,6 +359,7 @@ pub fn bench_share_encrypt_decrypt(c: &mut Criterion) {
                     checked_decrypt_with_shared_secret::<E>(
                         &setup.shared.ciphertext,
                         &setup.shared.aad,
+                        &setup.contexts[0].setup_params.g_inv,
                         &setup.shared.shared_secret,
                     )
                     .unwrap(),
@@ -344,6 +373,33 @@ pub fn bench_share_encrypt_decrypt(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("decrypt", msg_size), |b| {
             b.iter(|| decrypt())
         });
+    }
+}
+
+pub fn bench_validity_checks(c: &mut Criterion) {
+    let mut group = c.benchmark_group("VALIDITY CHECKS");
+    group.sample_size(10);
+
+    let rng = &mut StdRng::seed_from_u64(0);
+    let shares_num = NUM_SHARES_CASES[0];
+
+    for msg_size in MSG_SIZE_CASES {
+        let ciphertext_validity = {
+            let mut rng = rng.clone();
+            let setup = SetupFast::new(shares_num, msg_size, &mut rng);
+            move || {
+                black_box(check_ciphertext_validity(
+                    &setup.shared.ciphertext,
+                    &setup.shared.aad,
+                    &setup.contexts[0].setup_params.g_inv,
+                ))
+                .unwrap();
+            }
+        };
+        group.bench_function(
+            BenchmarkId::new("check_ciphertext_validity", msg_size),
+            |b| b.iter(|| ciphertext_validity()),
+        );
     }
 }
 
@@ -390,7 +446,7 @@ pub fn bench_refresh_shares(c: &mut Criterion) {
     let msg_size = MSG_SIZE_CASES[0];
 
     for &shares_num in NUM_SHARES_CASES.iter() {
-        let mut setup = SetupSimple::new(shares_num, msg_size, rng);
+        let setup = SetupSimple::new(shares_num, msg_size, rng);
         let threshold = setup.shared.threshold;
         group.bench_function(
             BenchmarkId::new("Refresh Shares", shares_num),
@@ -398,7 +454,7 @@ pub fn bench_refresh_shares(c: &mut Criterion) {
                 let mut rng = rand::rngs::StdRng::seed_from_u64(0);
                 b.iter(|| {
                     black_box(refresh_shares::<E>(
-                        &mut setup.contexts,
+                        &setup.contexts,
                         threshold,
                         &mut rng,
                     ));
@@ -414,6 +470,7 @@ criterion_group!(
     bench_share_prepare,
     bench_share_combine,
     bench_share_encrypt_decrypt,
+    bench_validity_checks,
     bench_recover_share_at_point,
     bench_refresh_shares,
 );

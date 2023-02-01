@@ -83,6 +83,7 @@ mod test_dkg_full {
         let plaintext = tpke::checked_decrypt_with_shared_secret(
             &ciphertext,
             aad,
+            &dkg.pvss_params.g_inv(),
             &shared_secret,
         )
         .unwrap();
@@ -130,6 +131,7 @@ mod test_dkg_full {
         let plaintext = tpke::checked_decrypt_with_shared_secret(
             &ciphertext,
             aad,
+            &dkg.pvss_params.g_inv(),
             &shared_secret,
         )
         .unwrap();

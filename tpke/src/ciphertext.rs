@@ -94,6 +94,7 @@ pub fn encrypt<R: RngCore, E: PairingEngine>(
         .mul(rand_element)
         .into();
 
+    // TODO: Consider adding aad to the Ciphertext struct
     Ciphertext::<E> {
         commitment,
         ciphertext,
@@ -101,36 +102,45 @@ pub fn encrypt<R: RngCore, E: PairingEngine>(
     }
 }
 
+/// Implements the check section 4.4.2 of the Ferveo paper, 'TPKE.CheckCiphertextValidity(U,W,aad)'
+/// See https://eprint.iacr.org/2022/898.pdf
 pub fn check_ciphertext_validity<E: PairingEngine>(
     c: &Ciphertext<E>,
     aad: &[u8],
-) -> bool {
-    let g_inv = E::G1Prepared::from(-E::G1Affine::prime_subgroup_generator());
+    g_inv: &E::G1Prepared,
+) -> Result<()> {
+    // H_G2(U, aad)
     let hash_g2 = E::G2Prepared::from(construct_tag_hash::<E>(
         c.commitment,
         &c.ciphertext[..],
         aad,
     ));
 
-    E::product_of_pairings(&[
+    let is_ciphertext_valid = E::product_of_pairings(&[
+        // e(U, H_G2(U, aad)) = e(G, W)
         (E::G1Prepared::from(c.commitment), hash_g2),
-        (g_inv, E::G2Prepared::from(c.auth_tag)),
-    ]) == E::Fqk::one()
+        (g_inv.clone(), E::G2Prepared::from(c.auth_tag)),
+    ]) == E::Fqk::one();
+
+    if is_ciphertext_valid {
+        Ok(())
+    } else {
+        Err(ThresholdEncryptionError::CiphertextVerificationFailed)
+    }
 }
 
 pub fn checked_decrypt<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     aad: &[u8],
-    privkey: E::G2Affine,
-) -> Vec<u8> {
-    if !check_ciphertext_validity(ciphertext, aad) {
-        panic!("Ciphertext is invalid");
-    }
+    g_inv: &E::G1Prepared,
+    privkey: &E::G2Affine,
+) -> Result<Vec<u8>> {
+    check_ciphertext_validity(ciphertext, aad, g_inv)?;
     let s = E::product_of_pairings(&[(
         E::G1Prepared::from(ciphertext.commitment),
-        E::G2Prepared::from(privkey),
+        E::G2Prepared::from(*privkey),
     )]);
-    decrypt_with_shared_secret(ciphertext, &s)
+    Ok(decrypt_with_shared_secret(ciphertext, &s))
 }
 
 fn decrypt_with_shared_secret<E: PairingEngine>(
@@ -149,11 +159,10 @@ fn decrypt_with_shared_secret<E: PairingEngine>(
 pub fn checked_decrypt_with_shared_secret<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     aad: &[u8],
+    g_inv: &E::G1Prepared,
     s: &E::Fqk,
 ) -> Result<Vec<u8>> {
-    if !check_ciphertext_validity(ciphertext, aad) {
-        return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
-    }
+    check_ciphertext_validity(ciphertext, aad, g_inv)?;
     Ok(decrypt_with_shared_secret(ciphertext, s))
 }
 
