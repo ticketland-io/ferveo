@@ -7,6 +7,7 @@ use chacha20poly1305::{
     aead::{generic_array::GenericArray, Aead, KeyInit},
     ChaCha20Poly1305, Nonce,
 };
+use crypto::{digest::Digest, sha2::Sha256};
 use rand_core::RngCore;
 
 use crate::{construct_tag_hash, hash_to_g2};
@@ -156,10 +157,12 @@ pub fn checked_decrypt_with_shared_secret<E: PairingEngine>(
     Ok(decrypt_with_shared_secret(ciphertext, s))
 }
 
-fn blake2s_hash(input: &[u8]) -> Vec<u8> {
-    let mut hasher = blake2b_simd::Params::new().hash_length(32).to_state();
-    hasher.update(input);
-    hasher.finalize().as_bytes().to_vec()
+fn sha256(input: &[u8]) -> Vec<u8> {
+    let mut result = [0u8; 32];
+    let mut hasher = Sha256::new();
+    hasher.input(input);
+    hasher.result(&mut result);
+    result.to_vec()
 }
 
 pub fn shared_secret_to_chacha<E: PairingEngine>(
@@ -167,7 +170,7 @@ pub fn shared_secret_to_chacha<E: PairingEngine>(
 ) -> ChaCha20Poly1305 {
     let mut prf_key = Vec::new();
     s.write(&mut prf_key).unwrap();
-    let prf_key_32 = blake2s_hash(&prf_key);
+    let prf_key_32 = sha256(&prf_key);
 
     ChaCha20Poly1305::new(GenericArray::from_slice(&prf_key_32))
 }
@@ -177,6 +180,6 @@ fn nonce_from_commitment<E: PairingEngine>(commitment: E::G1Affine) -> Nonce {
     commitment
         .serialize_unchecked(&mut commitment_bytes)
         .unwrap();
-    let commitment_hash = blake2s_hash(&commitment_bytes);
+    let commitment_hash = sha256(&commitment_bytes);
     *Nonce::from_slice(&commitment_hash[..12])
 }
