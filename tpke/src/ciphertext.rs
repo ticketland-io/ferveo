@@ -57,7 +57,6 @@ impl<E: PairingEngine> Ciphertext<E> {
         );
         let auth_tag = E::G2Affine::read(&auth_tag_bytes[..]).unwrap();
 
-        const CIPHERTEXT_LEN: usize = 33;
         let ciphertext = bytes[COMMITMENT_LEN + AUTH_TAG_LEN..].to_vec();
 
         Self {
@@ -119,17 +118,6 @@ pub fn check_ciphertext_validity<E: PairingEngine>(
     ]) == E::Fqk::one()
 }
 
-fn decrypt<E: PairingEngine>(
-    ciphertext: &Ciphertext<E>,
-    privkey: E::G2Affine,
-) -> Vec<u8> {
-    let s = E::product_of_pairings(&[(
-        E::G1Prepared::from(ciphertext.commitment),
-        E::G2Prepared::from(privkey),
-    )]);
-    decrypt_with_shared_secret(ciphertext, &s)
-}
-
 pub fn checked_decrypt<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     aad: &[u8],
@@ -162,11 +150,11 @@ pub fn checked_decrypt_with_shared_secret<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     aad: &[u8],
     s: &E::Fqk,
-) -> Vec<u8> {
+) -> Result<Vec<u8>> {
     if !check_ciphertext_validity(ciphertext, aad) {
-        panic!("Ciphertext is invalid");
+        return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
     }
-    decrypt_with_shared_secret(ciphertext, s)
+    Ok(decrypt_with_shared_secret(ciphertext, s))
 }
 
 fn sha256(input: &[u8]) -> Vec<u8> {

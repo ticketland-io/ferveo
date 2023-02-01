@@ -1,5 +1,7 @@
 //! Contains the public API of the library.
 
+#![allow(dead_code)]
+
 // TODO: Refactor this module to deduplicate shared code from tpke-wasm and tpke-wasm.
 
 use std::convert::TryInto;
@@ -13,8 +15,8 @@ type E = ark_bls12_381::Bls12_381;
 type TpkePublicKey = ark_bls12_381::G1Affine;
 type TpkePrivateKey = ark_bls12_381::G2Affine;
 type TpkeCiphertext = crate::Ciphertext<E>;
-type TpkeDecryptionShare = crate::DecryptionShare<E>;
-type TpkePublicDecryptionContext = crate::PublicDecryptionContext<E>;
+type TpkeDecryptionShare = crate::DecryptionShareFast<E>;
+type TpkePublicDecryptionContext = crate::PublicDecryptionContextFast<E>;
 type TpkeSharedSecret =
     <ark_bls12_381::Bls12_381 as ark_ec::PairingEngine>::Fqk;
 

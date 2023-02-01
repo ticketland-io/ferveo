@@ -6,97 +6,20 @@ use ark_serialize::{
 
 pub mod keypair;
 pub use keypair::*;
-use std::cmp::Ordering;
 
-#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
-/// Represents a tendermint validator
-pub struct TendermintValidator<E: PairingEngine> {
-    /// Total voting power in tendermint consensus
-    pub power: u64,
+#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize, PartialEq)]
+/// Represents an external validator
+pub struct ExternalValidator<E: PairingEngine> {
     /// The established address of the validator
     pub address: String,
     /// The Public key
     pub public_key: PublicKey<E>,
 }
 
-impl<E: PairingEngine> PartialEq for TendermintValidator<E> {
-    fn eq(&self, other: &Self) -> bool {
-        (self.power, &self.address) == (other.power, &other.address)
-    }
-}
-
-impl<E: PairingEngine> Eq for TendermintValidator<E> {}
-
-impl<E: PairingEngine> PartialOrd for TendermintValidator<E> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some((self.power, &self.address).cmp(&(other.power, &other.address)))
-    }
-}
-
-impl<E: PairingEngine> Ord for TendermintValidator<E> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        (self.power, &self.address).cmp(&(other.power, &other.address))
-    }
-}
-
-#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
-/// The set of tendermint validators for a dkg instance
-pub struct ValidatorSet<E: PairingEngine> {
-    pub validators: Vec<TendermintValidator<E>>,
-}
-
-impl<E: PairingEngine> ValidatorSet<E> {
-    /// Sorts the validators from highest to lowest. This ordering
-    /// first considers staking weight and breaks ties on established
-    /// address
-    pub fn new(mut validators: Vec<TendermintValidator<E>>) -> Self {
-        // reverse the ordering here
-        validators.sort_by(|a, b| b.cmp(a));
-        Self { validators }
-    }
-
-    /// Get the total voting power of the validator set
-    pub fn total_voting_power(&self) -> u64 {
-        self.validators.iter().map(|v| v.power).sum()
-    }
-}
-
 #[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Validator<E: PairingEngine> {
-    pub validator: TendermintValidator<E>,
-    pub weight: u32,
-    pub share_start: usize,
-    pub share_end: usize,
-}
-
-impl<E: PairingEngine> PartialEq for Validator<E> {
-    fn eq(&self, other: &Self) -> bool {
-        (
-            &self.validator,
-            self.weight,
-            self.share_start,
-            self.share_end,
-        ) == (
-            &other.validator,
-            other.weight,
-            other.share_start,
-            other.share_end,
-        )
-    }
-}
-
-impl<E: PairingEngine> Eq for Validator<E> {}
-
-impl<E: PairingEngine> PartialOrd for Validator<E> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.validator.cmp(&other.validator))
-    }
-}
-
-impl<E: PairingEngine> Ord for Validator<E> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.validator.cmp(&other.validator)
-    }
+    pub validator: ExternalValidator<E>,
+    pub share_index: usize,
 }
 
 impl Rng for ark_std::rand::prelude::StdRng {}
@@ -115,7 +38,7 @@ pub mod ark_serde {
     {
         use serde::ser::Error;
         let mut bytes = vec![];
-        data.serialize(&mut bytes).map_err(S::Error::custom)?;
+        data.serialize(&mut bytes).map_err(Error::custom)?;
         serde_bytes::Bytes::new(&bytes).serialize(serializer)
     }
     /// Deserialize an ark type with serde
@@ -126,7 +49,7 @@ pub mod ark_serde {
     {
         use serde::de::Error;
         let bytes = <serde_bytes::ByteBuf>::deserialize(deserializer)?;
-        T::deserialize(bytes.as_slice()).map_err(D::Error::custom)
+        T::deserialize(bytes.as_slice()).map_err(Error::custom)
     }
 }
 

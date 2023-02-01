@@ -1,75 +1,110 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
+
 use crate::*;
 use ark_ec::ProjectiveCurve;
 
-pub fn prepare_combine<E: PairingEngine>(
-    public_decryption_contexts: &[PublicDecryptionContext<E>],
-    shares: &[DecryptionShare<E>],
+pub fn prepare_combine_fast<E: PairingEngine>(
+    public_decryption_contexts: &[PublicDecryptionContextFast<E>],
+    shares: &[DecryptionShareFast<E>],
 ) -> Vec<E::G2Prepared> {
-    let mut domain = vec![];
+    let mut domain = vec![]; // omega_i, vector of domain points
     let mut n_0 = E::Fr::one();
     for d_i in shares.iter() {
-        domain.extend(
-            public_decryption_contexts[d_i.decrypter_index]
-                .domain
-                .iter(),
-        );
-        n_0 *= public_decryption_contexts[d_i.decrypter_index].lagrange_n_0;
+        domain.push(public_decryption_contexts[d_i.decrypter_index].domain);
+        n_0 *= public_decryption_contexts[d_i.decrypter_index].lagrange_n_0; // n_0_i = 1 * t^1 * t^2 ...
     }
     let s = SubproductDomain::<E::Fr>::new(domain);
-    let mut lagrange = s.inverse_lagrange_coefficients();
-    ark_ff::batch_inversion_and_mul(&mut lagrange, &n_0);
-    let mut start = 0usize;
-    shares
-        .iter()
-        .map(|d_i| {
+    let mut lagrange = s.inverse_lagrange_coefficients(); // 1/L_i
+                                                          // Given a vector of field elements {v_i}, compute the vector {coeff * v_i^(-1)}
+    ark_ff::batch_inversion_and_mul(&mut lagrange, &n_0); // n_0 * L_i
+                                                          // L_i * [b]Z_i
+    izip!(shares.iter(), lagrange.iter())
+        .map(|(d_i, lambda)| {
             let decrypter = &public_decryption_contexts[d_i.decrypter_index];
-            let end = start + decrypter.domain.len();
-            let lagrange_slice = &lagrange[start..end];
-            start = end;
+            let blinded_key_share =
+                decrypter.blinded_key_share.blinded_key_share;
             E::G2Prepared::from(
-                izip!(
-                    lagrange_slice.iter(),
-                    decrypter.blinded_key_shares.blinded_key_shares.iter() //decrypter.blinded_key_shares.window_tables.iter()
-                )
-                .map(|(lambda, blinded_key_share)| {
-                    blinded_key_share.mul(*lambda)
-                })
-                /*.map(|(lambda, base_table)| {
-                    FixedBaseMSM::multi_scalar_mul::<E::G2Projective>(
-                        scalar_bits,
-                        window_size,
-                        &base_table.window_table,
-                        &[*lambda],
-                    )[0]
-                })*/
-                .sum::<E::G2Projective>()
-                .into_affine(),
+                // [b]Z_i * L_i
+                blinded_key_share.mul(*lambda).into_affine(),
             )
         })
         .collect::<Vec<_>>()
 }
 
-pub fn share_combine<E: PairingEngine>(
-    shares: &[DecryptionShare<E>],
+pub fn prepare_combine_simple<E: PairingEngine>(
+    domain: &[E::Fr],
+) -> Vec<E::Fr> {
+    // In this formula x_i = 0, hence numerator is x_m
+    // See https://en.wikipedia.org/wiki/Lagrange_polynomial#Optimal_algorithm
+    lagrange_basis_at::<E>(domain, &E::Fr::zero())
+}
+
+/// Calculate lagrange coefficients using optimized formula
+pub fn lagrange_basis_at<E: PairingEngine>(
+    shares_x: &[E::Fr],
+    x_i: &E::Fr,
+) -> Vec<<E>::Fr> {
+    let mut lagrange_coeffs = vec![];
+    for x_j in shares_x {
+        let mut prod = E::Fr::one();
+        for x_m in shares_x {
+            if x_j != x_m {
+                prod *= (*x_m - x_i) / (*x_m - *x_j);
+            }
+        }
+        lagrange_coeffs.push(prod);
+    }
+    lagrange_coeffs
+}
+
+pub fn share_combine_fast<E: PairingEngine>(
+    shares: &[DecryptionShareFast<E>],
     prepared_key_shares: &[E::G2Prepared],
 ) -> E::Fqk {
     let mut pairing_product: Vec<(E::G1Prepared, E::G2Prepared)> = vec![];
 
-    for (d_i, blinded_key_share) in izip!(shares, prepared_key_shares.iter()) {
+    for (d_i, prepared_key_share) in izip!(shares, prepared_key_shares.iter()) {
         // e(D_i, [b*omega_i^-1] Z_{i,omega_i})
         pairing_product.push((
+            // D_i
             E::G1Prepared::from(d_i.decryption_share),
-            blinded_key_share.clone(),
+            // Z_{i,omega_i}) = [dk_{i}^{-1}]*\hat{Y}_{i_omega_j}]
+            // Reference: https://nikkolasg.github.io/ferveo/pvss.html#validator-decryption-of-private-key-shares
+            // Prepared key share is a sum of L_i * [b]Z_i
+            prepared_key_share.clone(),
         ));
     }
     E::product_of_pairings(&pairing_product)
 }
 
+pub fn share_combine_simple<E: PairingEngine>(
+    shares: &[DecryptionShareSimple<E>],
+    lagrange_coeffs: &[E::Fr],
+) -> E::Fqk {
+    let mut product_of_shares = E::Fqk::one();
+
+    // Sum of C_i^{L_i}z
+    for (c_i, alpha_i) in izip!(shares, lagrange_coeffs) {
+        // Exponentiation by alpha_i
+        let ss = c_i.decryption_share.pow(alpha_i.into_repr());
+        product_of_shares *= ss;
+    }
+
+    product_of_shares
+}
+
+pub fn share_combine_simple_precomputed<E: PairingEngine>(
+    shares: &[DecryptionShareSimplePrecomputed<E>],
+) -> E::Fqk {
+    // s = ∏ C_{λ_i}, where λ_i is the Lagrange coefficient for i
+    shares
+        .iter()
+        .fold(E::Fqk::one(), |acc, c_i| acc * c_i.decryption_share)
+}
+
 #[cfg(test)]
 mod tests {
-
     type Fr = <ark_bls12_381::Bls12_381 as ark_ec::PairingEngine>::Fr;
 
     #[test]
