@@ -428,7 +428,7 @@ pub fn bench_recover_share_at_point(c: &mut Criterion) {
                 let mut rng = rand::rngs::StdRng::seed_from_u64(0);
                 b.iter(|| {
                     let _ = black_box(recover_share_at_point::<E>(
-                        &remaining_participants[..shares_num],
+                        &remaining_participants[..shares_num - 1],
                         threshold,
                         &x_r,
                         &mut rng,
