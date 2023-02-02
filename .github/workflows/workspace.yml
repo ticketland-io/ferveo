@@ -146,7 +146,7 @@ jobs:
           export REL_OUTPUT_PATH="`dirs +1`/benchmarks/perf/${{ matrix.component }}";
           eval OUTPUT_PATH=$REL_OUTPUT_PATH;
           mkdir -p $OUTPUT_PATH;
-          cargo bench -- --output-format bencher | tee $OUTPUT_PATH/output.txt;
+          cargo bench | tee $OUTPUT_PATH/output.txt;
           echo "Saved output to $OUTPUT_PATH/output.txt";
           popd
 
