@@ -146,10 +146,7 @@ jobs:
           export REL_OUTPUT_PATH="`dirs +1`/benchmarks/perf/${{ matrix.component }}";
           eval OUTPUT_PATH=$REL_OUTPUT_PATH;
           mkdir -p $OUTPUT_PATH;
-          touch $OUTPUT_PATH/output.txt;
-          # Currently fails to extract benchmark information https://github.com/rhysd/github-action-benchmark/issues/39
-          # Thats why '::' is replaced with ' '
-          cargo bench -- --output-format bencher | sed 's/::/__/' | tee $OUTPUT_PATH/output.txt;
+          cargo bench -- --output-format bencher | tee $OUTPUT_PATH/output.txt;
           echo "Saved output to $OUTPUT_PATH/output.txt";
           popd
 
