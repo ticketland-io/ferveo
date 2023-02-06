@@ -80,7 +80,7 @@ impl<E: PairingEngine, T> PubliclyVerifiableSS<E, T> {
     ) -> Result<Self> {
         // Our random polynomial, \phi(x) = s + \sum_{i=1}^{t-1} a_i x^i
         let mut phi = DensePolynomial::<E::Fr>::rand(
-            (dkg.params.shares_num - dkg.params.security_threshold) as usize,
+            (dkg.params.security_threshold - 1) as usize,
             rng,
         );
         phi.coeffs[0] = *s; // setting the first coefficient to secret value
@@ -320,10 +320,7 @@ mod test_pvss {
         // check that the chosen secret coefficient is correct
         assert_eq!(pvss.coeffs[0], G1::prime_subgroup_generator().mul(s));
         //check that a polynomial of the correct degree was created
-        assert_eq!(
-            pvss.coeffs.len(),
-            dkg.params.security_threshold as usize + 1
-        );
+        assert_eq!(pvss.coeffs.len(), dkg.params.security_threshold as usize);
         // check that the correct number of shares were created
         assert_eq!(pvss.shares.len(), dkg.validators.len());
         // check that the prove of knowledge is correct
@@ -384,7 +381,7 @@ mod test_pvss {
         //check that a polynomial of the correct degree was created
         assert_eq!(
             aggregate.coeffs.len(),
-            dkg.params.security_threshold as usize + 1
+            dkg.params.security_threshold as usize
         );
         // check that the correct number of shares were created
         assert_eq!(aggregate.shares.len(), dkg.validators.len());
