@@ -112,15 +112,7 @@ impl SetupSimple {
         // Creating decryption shares
         let decryption_shares: Vec<_> = contexts
             .iter()
-            .map(|context| {
-                context
-                    .create_share(
-                        &ciphertext,
-                        aad,
-                        &contexts[0].setup_params.g_inv,
-                    )
-                    .unwrap()
-            })
+            .map(|context| context.create_share(&ciphertext, aad).unwrap())
             .collect();
 
         let pub_contexts = contexts[0].clone().public_decryption_contexts;
@@ -192,7 +184,6 @@ pub fn bench_create_decryption_share(c: &mut Criterion) {
                             ctx.create_share(
                                 &setup.shared.ciphertext,
                                 &setup.shared.aad,
-                                &setup.contexts[0].setup_params.g_inv,
                             )
                         })
                         .collect::<Vec<_>>()
@@ -376,15 +367,15 @@ pub fn bench_share_encrypt_decrypt(c: &mut Criterion) {
     }
 }
 
-pub fn bench_validity_checks(c: &mut Criterion) {
-    let mut group = c.benchmark_group("VALIDITY CHECKS");
+pub fn bench_ciphertext_validity_checks(c: &mut Criterion) {
+    let mut group = c.benchmark_group("CIPHERTEXT VERIFICATION");
     group.sample_size(10);
 
     let rng = &mut StdRng::seed_from_u64(0);
     let shares_num = NUM_SHARES_CASES[0];
 
     for msg_size in MSG_SIZE_CASES {
-        let ciphertext_validity = {
+        let ciphertext_verification = {
             let mut rng = rng.clone();
             let setup = SetupFast::new(shares_num, msg_size, &mut rng);
             move || {
@@ -397,8 +388,72 @@ pub fn bench_validity_checks(c: &mut Criterion) {
             }
         };
         group.bench_function(
-            BenchmarkId::new("check_ciphertext_validity", msg_size),
-            |b| b.iter(|| ciphertext_validity()),
+            BenchmarkId::new("ciphertext_verification", msg_size),
+            |b| b.iter(|| ciphertext_verification()),
+        );
+    }
+}
+
+pub fn bench_decryption_share_validity_checks(c: &mut Criterion) {
+    let mut group = c.benchmark_group("DECRYPTION SHARE VERIFICATION");
+    group.sample_size(10);
+
+    let rng = &mut StdRng::seed_from_u64(0);
+    let msg_size = MSG_SIZE_CASES[0];
+
+    for shares_num in NUM_SHARES_CASES {
+        let share_fast_verification = {
+            let mut rng = rng.clone();
+            let setup = SetupFast::new(shares_num, msg_size, &mut rng);
+            move || {
+                black_box(verify_decryption_shares_fast(
+                    &setup.pub_contexts,
+                    &setup.shared.ciphertext,
+                    &setup.decryption_shares,
+                ))
+            }
+        };
+        group.bench_function(
+            BenchmarkId::new("share_fast_verification", shares_num),
+            |b| b.iter(|| share_fast_verification()),
+        );
+
+        let mut share_fast_batch_verification = {
+            let mut rng = rng.clone();
+            let setup = SetupFast::new(shares_num, msg_size, &mut rng);
+            // We need to repackage a bunch of variables here to avoid borrowing issues:
+            let ciphertext = setup.shared.ciphertext.clone();
+            let ciphertexts = vec![ciphertext];
+            let decryption_shares = setup.decryption_shares.clone();
+            let decryption_shares = vec![decryption_shares];
+            move || {
+                black_box(batch_verify_decryption_shares(
+                    &setup.pub_contexts,
+                    &ciphertexts,
+                    &decryption_shares,
+                    &mut rng,
+                ))
+            }
+        };
+        group.bench_function(
+            BenchmarkId::new("share_fast_batch_verification", shares_num),
+            |b| b.iter(|| share_fast_batch_verification()),
+        );
+
+        let share_simple_verification = {
+            let mut rng = rng.clone();
+            let setup = SetupSimple::new(shares_num, msg_size, &mut rng);
+            move || {
+                black_box(verify_decryption_shares_simple(
+                    &setup.pub_contexts,
+                    &setup.shared.ciphertext,
+                    &setup.decryption_shares,
+                ))
+            }
+        };
+        group.bench_function(
+            BenchmarkId::new("share_simple_verification", shares_num),
+            |b| b.iter(|| share_simple_verification()),
         );
     }
 }
@@ -470,7 +525,8 @@ criterion_group!(
     bench_share_prepare,
     bench_share_combine,
     bench_share_encrypt_decrypt,
-    bench_validity_checks,
+    bench_ciphertext_validity_checks,
+    bench_decryption_share_validity_checks,
     bench_recover_share_at_point,
     bench_refresh_shares,
 );

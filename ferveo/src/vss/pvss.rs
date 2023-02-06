@@ -8,11 +8,13 @@ use ark_ec::PairingEngine;
 use ark_ff::UniformRand;
 use ark_serialize::*;
 use ferveo_common::{Keypair, PublicKey};
-use group_threshold_cryptography::{Ciphertext, DecryptionShareSimple};
+use group_threshold_cryptography::{
+    Ciphertext, DecryptionShareSimple, PrivateKeyShare,
+};
 use itertools::{zip_eq, Itertools};
 use subproductdomain::fast_multiexp;
 
-/// These are the blinded evaluations of weight shares of a single random polynomial
+/// These are the blinded evaluations of shares of a single random polynomial
 pub type ShareEncryptions<E> = <E as PairingEngine>::G2Affine;
 
 /// Marker struct for unaggregated PVSS transcripts
@@ -261,26 +263,35 @@ pub fn aggregate_for_decryption<E: PairingEngine>(
 
 pub fn make_decryption_shares<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
-    validator_keypairs: Vec<Keypair<E>>,
-    aggregate: Vec<E::G2Affine>,
+    validator_keypairs: &[Keypair<E>],
+    aggregate: &[E::G2Affine],
+    aad: &[u8],
+    g_inv: &E::G1Prepared,
 ) -> Vec<DecryptionShareSimple<E>> {
+    // TODO: Calculate separately for each validator
     aggregate
         .iter()
         .zip_eq(validator_keypairs.iter())
-        .map(|(encrypted_share, keypair)| {
+        .enumerate()
+        .map(|(decrypter_index, (encrypted_share, keypair))| {
             // Decrypt private key shares https://nikkolasg.github.io/ferveo/pvss.html#validator-decryption-of-private-key-shares
             let z_i = encrypted_share
                 .mul(keypair.decryption_key.inverse().unwrap().into_repr());
-            let u = ciphertext.commitment;
-            E::pairing(u, z_i)
-        })
-        .enumerate()
-        .map(
-            |(decrypter_index, decryption_share)| DecryptionShareSimple {
+            // TODO: Consider using "container" structs from `tpke` for other primitives
+            let private_key_share = PrivateKeyShare {
+                private_key_share: z_i.into_affine(),
+            };
+
+            DecryptionShareSimple::create(
                 decrypter_index,
-                decryption_share,
-            },
-        )
+                &keypair.decryption_key,
+                &private_key_share,
+                ciphertext,
+                aad,
+                g_inv,
+            )
+            .unwrap() // Unwrapping here only because this is a test method!
+        })
         .collect::<Vec<_>>()
 }
 

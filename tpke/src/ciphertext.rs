@@ -103,7 +103,8 @@ pub fn encrypt<R: RngCore, E: PairingEngine>(
 }
 
 /// Implements the check section 4.4.2 of the Ferveo paper, 'TPKE.CheckCiphertextValidity(U,W,aad)'
-/// See https://eprint.iacr.org/2022/898.pdf
+/// See: https://eprint.iacr.org/2022/898.pdf
+/// See: https://nikkolasg.github.io/ferveo/tpke.html#to-validate-ciphertext-for-ind-cca2-security
 pub fn check_ciphertext_validity<E: PairingEngine>(
     c: &Ciphertext<E>,
     aad: &[u8],
