@@ -1,7 +1,6 @@
 #![allow(unused_imports)]
 
 pub mod dkg;
-pub mod msg;
 pub mod vss;
 
 pub mod primitives;
@@ -12,7 +11,6 @@ pub use primitives::*;
 use ferveo_common::Rng;
 
 use crate::dkg::*;
-use crate::msg::*;
 
 use ark_ec::{AffineCurve, ProjectiveCurve};
 use ark_ff::{Field, One, Zero};
@@ -25,7 +23,6 @@ use serde::*;
 
 use anyhow::{anyhow, Result};
 pub use dkg::*;
-pub use msg::*;
 pub use vss::*;
 
 use ark_ec::msm::FixedBaseMSM;
@@ -84,6 +81,7 @@ mod test_dkg_full {
                         aad,
                         &validator_keypair.decryption_key,
                         validator_index,
+                        &dkg.pvss_params.g_inv(),
                     )
                 })
                 .collect();
@@ -128,6 +126,7 @@ mod test_dkg_full {
         let plaintext = tpke::checked_decrypt_with_shared_secret(
             &ciphertext,
             aad,
+            &dkg.pvss_params.g_inv(),
             &shared_secret,
         )
         .unwrap();
@@ -155,6 +154,7 @@ mod test_dkg_full {
         let plaintext = tpke::checked_decrypt_with_shared_secret(
             &ciphertext,
             aad,
+            &dkg.pvss_params.g_inv(),
             &shared_secret,
         )
         .unwrap();
@@ -309,6 +309,7 @@ mod test_dkg_full {
                         aad,
                         &validator_keypair.decryption_key,
                         validator_index,
+                        &dkg.pvss_params.g_inv(),
                     )
                 })
                 .collect();
@@ -323,6 +324,7 @@ mod test_dkg_full {
                 &new_private_key_share,
                 &ciphertext,
                 aad,
+                &dkg.pvss_params.g_inv(),
             )
             .unwrap(),
         );

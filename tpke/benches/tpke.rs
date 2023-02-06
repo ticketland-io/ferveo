@@ -53,8 +53,15 @@ impl SetupFast {
 
         let mut decryption_shares: Vec<DecryptionShareFast<E>> = vec![];
         for context in contexts.iter() {
-            decryption_shares
-                .push(context.create_share(&ciphertext, aad).unwrap());
+            decryption_shares.push(
+                context
+                    .create_share(
+                        &ciphertext,
+                        aad,
+                        &contexts[0].setup_params.g_inv,
+                    )
+                    .unwrap(),
+            );
         }
 
         let pub_contexts = contexts[0].clone().public_decryption_contexts;
@@ -160,6 +167,7 @@ pub fn bench_create_decryption_share(c: &mut Criterion) {
                             ctx.create_share(
                                 &setup.shared.ciphertext,
                                 &setup.shared.aad,
+                                &setup.contexts[0].setup_params.g_inv,
                             )
                         })
                         .collect::<Vec<_>>()
@@ -345,6 +353,7 @@ pub fn bench_share_encrypt_decrypt(c: &mut Criterion) {
                     checked_decrypt_with_shared_secret::<E>(
                         &setup.shared.ciphertext,
                         &setup.shared.aad,
+                        &setup.contexts[0].setup_params.g_inv,
                         &setup.shared.shared_secret,
                     )
                     .unwrap(),
@@ -376,6 +385,7 @@ pub fn bench_ciphertext_validity_checks(c: &mut Criterion) {
                 black_box(check_ciphertext_validity(
                     &setup.shared.ciphertext,
                     &setup.shared.aad,
+                    &setup.contexts[0].setup_params.g_inv,
                 ))
                 .unwrap();
             }

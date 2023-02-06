@@ -268,14 +268,13 @@ pub fn setup_simple<E: PairingEngine>(
 mod tests {
     use crate::*;
     use ark_bls12_381::Fr;
-    use std::collections::HashMap;
-    use std::ops::Mul;
-
     use ark_ec::ProjectiveCurve;
     use ark_ff::BigInteger256;
     use ark_std::test_rng;
     use itertools::Itertools;
     use rand::prelude::StdRng;
+    use std::collections::HashMap;
+    use std::ops::Mul;
 
     type E = ark_bls12_381::Bls12_381;
     type Fqk = <ark_bls12_381::Bls12_381 as PairingEngine>::Fqk;
@@ -306,11 +305,14 @@ mod tests {
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
-        let (pubkey, privkey, _) = setup_fast::<E>(threshold, shares_num, rng);
+        let (pubkey, privkey, contexts) =
+            setup_fast::<E>(threshold, shares_num, rng);
+        let g_inv = &contexts[0].setup_params.g_inv;
 
         let ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
 
-        let plaintext = checked_decrypt(&ciphertext, aad, privkey).unwrap();
+        let plaintext =
+            checked_decrypt(&ciphertext, aad, g_inv, &privkey).unwrap();
 
         assert_eq!(msg, plaintext)
     }
@@ -320,11 +322,16 @@ mod tests {
         aad: &[u8],
         ciphertext: &Ciphertext<E>,
         shared_secret: &E::Fqk,
+        g_inv: &E::G1Prepared,
     ) {
         // So far, the ciphertext is valid
-        let plaintext =
-            checked_decrypt_with_shared_secret(ciphertext, aad, shared_secret)
-                .unwrap();
+        let plaintext = checked_decrypt_with_shared_secret(
+            ciphertext,
+            aad,
+            g_inv,
+            shared_secret,
+        )
+        .unwrap();
         assert_eq!(plaintext, msg);
 
         // Malformed the ciphertext
@@ -333,6 +340,7 @@ mod tests {
         assert!(checked_decrypt_with_shared_secret(
             &ciphertext,
             aad,
+            g_inv,
             shared_secret,
         )
         .is_err());
@@ -342,6 +350,7 @@ mod tests {
         assert!(checked_decrypt_with_shared_secret(
             &ciphertext,
             aad,
+            g_inv,
             shared_secret,
         )
         .is_err());
@@ -355,19 +364,20 @@ mod tests {
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
 
-        let (pubkey, _, _) = setup_fast::<E>(threshold, shares_num, rng);
+        let (pubkey, _, contexts) = setup_fast::<E>(threshold, shares_num, rng);
+        let g_inv = &contexts[0].setup_params.g_inv;
         let mut ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
 
         // So far, the ciphertext is valid
-        assert!(check_ciphertext_validity(&ciphertext, aad).is_ok());
+        assert!(check_ciphertext_validity(&ciphertext, aad, g_inv).is_ok());
 
         // Malformed the ciphertext
         ciphertext.ciphertext[0] += 1;
-        assert!(check_ciphertext_validity(&ciphertext, aad).is_err());
+        assert!(check_ciphertext_validity(&ciphertext, aad, g_inv).is_err());
 
         // Malformed the AAD
         let aad = "bad aad".as_bytes();
-        assert!(check_ciphertext_validity(&ciphertext, aad).is_err());
+        assert!(check_ciphertext_validity(&ciphertext, aad, g_inv).is_err());
     }
 
     #[test]
@@ -379,10 +389,13 @@ mod tests {
         let aad: &[u8] = "my-aad".as_bytes();
 
         let (pubkey, _, contexts) = setup_fast::<E>(threshold, shares_num, rng);
+        let g_inv = &contexts[0].setup_params.g_inv;
         let ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
 
         let bad_aad = "bad aad".as_bytes();
-        assert!(contexts[0].create_share(&ciphertext, bad_aad).is_err());
+        assert!(contexts[0]
+            .create_share(&ciphertext, bad_aad, g_inv)
+            .is_err());
     }
 
     #[test]
@@ -395,6 +408,7 @@ mod tests {
 
         let (pubkey, _, contexts) =
             setup_simple::<E>(threshold, shares_num, rng);
+        let _g_inv = &contexts[0].setup_params.g_inv;
         let ciphertext = encrypt::<StdRng, E>(msg, aad, &pubkey, rng);
 
         let bad_aad = "bad aad".as_bytes();
@@ -411,12 +425,13 @@ mod tests {
 
         let (pubkey, _, contexts) =
             setup_fast::<E>(threshold, shares_num, &mut rng);
+        let g_inv = &contexts[0].setup_params.g_inv;
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
         let mut decryption_shares: Vec<DecryptionShareFast<E>> = vec![];
         for context in contexts.iter() {
             decryption_shares
-                .push(context.create_share(&ciphertext, aad).unwrap());
+                .push(context.create_share(&ciphertext, aad, g_inv).unwrap());
         }
 
         // TODO: Verify and enable this check
@@ -439,7 +454,13 @@ mod tests {
         )
         .unwrap();
 
-        test_ciphertext_validation_fails(msg, aad, &ciphertext, &shared_secret);
+        test_ciphertext_validation_fails(
+            msg,
+            aad,
+            &ciphertext,
+            &shared_secret,
+            g_inv,
+        );
     }
 
     #[test]
@@ -452,6 +473,7 @@ mod tests {
 
         let (pubkey, _, contexts) =
             setup_simple::<E>(threshold, shares_num, &mut rng);
+        let g_inv = &contexts[0].setup_params.g_inv;
 
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
@@ -465,7 +487,13 @@ mod tests {
             &decryption_shares,
         );
 
-        test_ciphertext_validation_fails(msg, aad, &ciphertext, &shared_secret);
+        test_ciphertext_validation_fails(
+            msg,
+            aad,
+            &ciphertext,
+            &shared_secret,
+            g_inv,
+        );
     }
 
     #[test]
@@ -478,7 +506,7 @@ mod tests {
 
         let (pubkey, _, contexts) =
             setup_simple::<E>(threshold, shares_num, &mut rng);
-
+        let g_inv = &contexts[0].setup_params.g_inv;
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
         let domain = contexts[0]
@@ -499,7 +527,13 @@ mod tests {
         let shared_secret =
             share_combine_simple_precomputed::<E>(&decryption_shares);
 
-        test_ciphertext_validation_fails(msg, aad, &ciphertext, &shared_secret);
+        test_ciphertext_validation_fails(
+            msg,
+            aad,
+            &ciphertext,
+            &shared_secret,
+            g_inv,
+        );
     }
 
     #[test]
@@ -649,6 +683,7 @@ mod tests {
         contexts: &[PrivateDecryptionContextSimple<E>],
         ciphertext: &Ciphertext<E>,
         aad: &[u8],
+        _g_inv: &E::G1Prepared,
     ) -> E::Fqk {
         let decryption_shares: Vec<_> = contexts
             .iter()
@@ -681,11 +716,16 @@ mod tests {
 
         let (pubkey, _, contexts) =
             setup_simple::<E>(threshold, shares_num, rng);
+        let g_inv = &contexts[0].setup_params.g_inv;
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
         // Create an initial shared secret
-        let old_shared_secret =
-            make_shared_secret_from_contexts(&contexts, &ciphertext, aad);
+        let old_shared_secret = make_shared_secret_from_contexts(
+            &contexts,
+            &ciphertext,
+            aad,
+            g_inv,
+        );
 
         // Now, we're going to recover a new share at a random point and check that the shared secret is still the same
 
@@ -693,7 +733,7 @@ mod tests {
         let x_r = Fr::rand(rng);
 
         // Remove one participant from the contexts and all nested structures
-        let mut remaining_participants = contexts;
+        let mut remaining_participants = contexts.clone();
         let removed_participant = remaining_participants.pop().unwrap();
         for p in &mut remaining_participants {
             p.public_decryption_contexts.pop().unwrap();
@@ -766,6 +806,7 @@ mod tests {
                 &new_private_key_share,
                 &ciphertext,
                 aad,
+                g_inv,
             )
             .unwrap(),
         );
@@ -792,12 +833,17 @@ mod tests {
 
         let (pubkey, _, contexts) =
             setup_simple::<E>(threshold, shares_num, rng);
+        let g_inv = &contexts[0].setup_params.g_inv;
         let pub_contexts = contexts[0].public_decryption_contexts.clone();
         let ciphertext = encrypt::<_, E>(msg, aad, &pubkey, rng);
 
         // Create an initial shared secret
-        let old_shared_secret =
-            make_shared_secret_from_contexts(&contexts, &ciphertext, aad);
+        let old_shared_secret = make_shared_secret_from_contexts(
+            &contexts,
+            &ciphertext,
+            aad,
+            g_inv,
+        );
 
         // Now, we're going to refresh the shares and check that the shared secret is the same
 
@@ -825,6 +871,7 @@ mod tests {
                     &private_key_share,
                     &ciphertext,
                     aad,
+                    g_inv,
                 )
                 .unwrap()
             })

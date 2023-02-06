@@ -51,8 +51,9 @@ impl<E: PairingEngine> DecryptionShareSimple<E> {
         private_key_share: &PrivateKeyShare<E>,
         ciphertext: &Ciphertext<E>,
         aad: &[u8],
+        g_inv: &E::G1Prepared,
     ) -> Result<DecryptionShareSimple<E>> {
-        check_ciphertext_validity::<E>(ciphertext, aad)?;
+        check_ciphertext_validity::<E>(ciphertext, aad, g_inv)?;
 
         // D_i = e(U, Z_i)
         let decryption_share = E::pairing(
