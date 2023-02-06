@@ -58,6 +58,7 @@ mod test_dkg_full {
         let msg: &[u8] = "abc".as_bytes();
         let aad: &[u8] = "my-aad".as_bytes();
         let public_key = dkg.final_key();
+        let g_inv = dkg.pvss_params.g_inv();
 
         let ciphertext = tpke::encrypt::<_, E>(msg, aad, &public_key, rng);
 
@@ -71,6 +72,7 @@ mod test_dkg_full {
             &validator_keypairs,
             &share_aggregate,
             aad,
+            &g_inv,
         );
 
         let shares_x = &dkg
@@ -88,6 +90,7 @@ mod test_dkg_full {
         let plaintext = tpke::checked_decrypt_with_shared_secret(
             &ciphertext,
             aad,
+            &dkg.pvss_params.g_inv(),
             &shared_secret,
         )
         .unwrap();
@@ -103,6 +106,7 @@ mod test_dkg_full {
         let aad: &[u8] = "my-aad".as_bytes();
         let public_key = dkg.final_key();
         let ciphertext = tpke::encrypt::<_, E>(msg, aad, &public_key, rng);
+        let g_inv = dkg.pvss_params.g_inv();
 
         let share_aggregate = aggregate_for_decryption(&dkg);
 
@@ -119,6 +123,7 @@ mod test_dkg_full {
             &validator_keypairs,
             &share_aggregate,
             aad,
+            &g_inv,
         );
 
         let shares_x = &dkg
@@ -138,6 +143,7 @@ mod test_dkg_full {
         let plaintext = tpke::checked_decrypt_with_shared_secret(
             &ciphertext,
             aad,
+            &dkg.pvss_params.g_inv(),
             &shared_secret,
         )
         .unwrap();
