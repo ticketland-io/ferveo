@@ -19,7 +19,6 @@ pub struct PubliclyVerifiableDkg<E: PairingEngine> {
     pub domain: ark_poly::Radix2EvaluationDomain<E::Fr>,
     pub state: DkgState<E>,
     pub me: usize,
-    pub window: (u32, u32),
 }
 
 impl<E: PairingEngine> PubliclyVerifiableDkg<E> {
@@ -48,9 +47,6 @@ impl<E: PairingEngine> PubliclyVerifiableDkg<E> {
 
         let validators = make_validators(validators);
 
-        // TODO: Remove my_partition
-        let my_partition =
-            params.retry_after * (2 * me as u32 / params.retry_after);
         Ok(Self {
             session_keypair,
             params,
@@ -66,8 +62,6 @@ impl<E: PairingEngine> PubliclyVerifiableDkg<E> {
             },
             me,
             validators,
-            // TODO: Remove window
-            window: (my_partition, my_partition + params.retry_after),
         })
     }
 
@@ -81,18 +75,7 @@ impl<E: PairingEngine> PubliclyVerifiableDkg<E> {
                 if !self.vss.contains_key(&(self.me as u32)) =>
             {
                 *block += 1;
-                // if our scheduled window begins, issue PVSS
-                if self.window.0 + 1 == *block {
-                    PvssScheduler::Issue
-                } else if &self.window.1 < block {
-                    // reset the window during which we try to get our
-                    // PVSS on chain
-                    *block = self.window.0 + 1;
-                    // reissue PVSS
-                    PvssScheduler::Issue
-                } else {
-                    PvssScheduler::Wait
-                }
+                PvssScheduler::Wait
             }
             _ => PvssScheduler::Wait,
         }
@@ -302,7 +285,6 @@ pub(crate) mod test_common {
                 tau: 0,
                 security_threshold,
                 shares_num,
-                retry_after: 2,
             },
             &me,
             keypairs[my_index],
@@ -373,7 +355,6 @@ mod test_dkg_init {
                 tau: 0,
                 security_threshold: 4,
                 shares_num: 8,
-                retry_after: 2,
             },
             &ExternalValidator::<EllipticCurve> {
                 address: "non-existant-validator".into(),
@@ -386,16 +367,6 @@ mod test_dkg_init {
             err.to_string(),
             "could not find this validator in the provided validator set"
         )
-    }
-
-    /// Test that the windows of a validator are correctly
-    /// computed from the `retry_after` param
-    #[test]
-    fn test_validator_windows() {
-        for i in 0..4_u32 {
-            let dkg = setup_dkg(i as usize);
-            assert_eq!(dkg.window, (2 * i, 2 * i + 2));
-        }
     }
 }
 
@@ -612,19 +583,6 @@ mod test_dealing {
         assert!(matches!(dkg.state, DkgState::Dealt))
     }
 
-    /// Check that if a validators window has not arrived,
-    /// the DKG advises us to wait
-    #[test]
-    fn test_pvss_wait_before_window() {
-        let mut dkg = setup_dkg(1);
-        if let DkgState::Sharing { block, .. } = dkg.state {
-            assert!(dkg.window.0 > block);
-        } else {
-            panic!("Test failed");
-        }
-        assert_eq!(dkg.increase_block(), PvssScheduler::Wait);
-    }
-
     /// Test that the DKG advises us to not issue a PVSS transcript
     /// if we are not in state [`DkgState::Sharing{..}`]
     #[test]
@@ -655,35 +613,7 @@ mod test_dealing {
         assert!(dkg.apply_message(sender, pvss).is_ok());
         assert_eq!(dkg.increase_block(), PvssScheduler::Wait);
     }
-
-    /// Test that if our own PVSS transcript is not on chain
-    /// after the retry window, the DKG advises us to issue again.
-    #[test]
-    fn test_pvss_reissue() {
-        let mut dkg = setup_dkg(0);
-        dkg.state = DkgState::Sharing {
-            accumulated_shares: 0,
-            block: 2,
-        };
-        assert_eq!(dkg.increase_block(), PvssScheduler::Issue);
-        assert_eq!(dkg.increase_block(), PvssScheduler::Wait);
-    }
-
-    /// Test that we are only advised to issue a PVSS at the
-    /// beginning of our window, not for every block in it
-    #[test]
-    fn test_pvss_wait_middle_of_window() {
-        let mut dkg = setup_dkg(0);
-        assert_eq!(dkg.increase_block(), PvssScheduler::Issue);
-        if let DkgState::Sharing { block, .. } = dkg.state {
-            assert!(dkg.window.0 < block && block < dkg.window.1);
-        } else {
-            panic!("Test failed");
-        }
-        assert_eq!(dkg.increase_block(), PvssScheduler::Wait);
-    }
 }
-
 /// Test aggregating transcripts into final key
 #[cfg(test)]
 mod test_aggregation {

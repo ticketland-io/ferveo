@@ -27,7 +27,6 @@ pub struct Params {
     pub tau: u64,
     pub security_threshold: u32,
     pub shares_num: u32,
-    pub retry_after: u32, // TODO: Remove. Not relevant in our scheme.
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -31,8 +31,10 @@ pub use decryption::*;
 pub use key_share::*;
 pub use refresh::*;
 
-// TODO: Turn into a crate features
+#[cfg(feature = "api")]
 pub mod api;
+
+#[cfg(feature = "serialization")]
 pub mod serialization;
 
 pub trait ThresholdEncryptionParameters {
