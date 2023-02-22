@@ -26,6 +26,7 @@ pub struct SetupParams<E: PairingEngine> {
     pub b_inv: E::Fr,
     pub g: E::G1Affine,
     pub g_inv: E::G1Prepared,
+    pub h_inv: E::G2Prepared,
     pub h: E::G2Affine,
 }
 
@@ -35,7 +36,6 @@ pub struct PrivateDecryptionContextFast<E: PairingEngine> {
     pub setup_params: SetupParams<E>,
     pub private_key_share: PrivateKeyShare<E>,
     pub public_decryption_contexts: Vec<PublicDecryptionContextFast<E>>,
-    pub scalar_bits: usize,
 }
 
 impl<E: PairingEngine> PrivateDecryptionContextFast<E> {

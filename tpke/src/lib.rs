@@ -9,7 +9,7 @@ use ark_poly::{
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::izip;
 
-use subproductdomain::SubproductDomain;
+use subproductdomain::{fast_multiexp, SubproductDomain};
 
 use rand_core::RngCore;
 use std::usize;
@@ -106,6 +106,21 @@ pub fn setup_fast<E: PairingEngine>(
     // `evals` are evaluations of the polynomial f over the domain, omega: f(ω_j) for ω_j in Ω
     let evals = threshold_poly.evaluate_over_domain_by_ref(fft_domain);
 
+    // A - public key shares of participants
+    let pubkey_shares = fast_multiexp(&evals.evals, g.into_projective());
+    let pubkey_share = g.mul(evals.evals[0]);
+    debug_assert!(pubkey_shares[0] == E::G1Affine::from(pubkey_share));
+
+    // Y, but only when b = 1 - private key shares of participants
+    let privkey_shares = fast_multiexp(&evals.evals, h.into_projective());
+
+    // a_0
+    let x = threshold_poly.coeffs[0];
+
+    // F_0 - The commitment to the constant term, and is the public key output Y from PVDKG
+    let pubkey = g.mul(x);
+    let privkey = h.mul(x);
+
     let mut domain_points = Vec::with_capacity(shares_num);
     let mut point = E::Fr::one();
     let mut domain_points_inv = Vec::with_capacity(shares_num);
@@ -117,25 +132,6 @@ pub fn setup_fast<E: PairingEngine>(
         domain_points_inv.push(point_inv);
         point_inv *= fft_domain.group_gen_inv;
     }
-
-    let scalar_bits = E::Fr::size_in_bits();
-
-    // A - public key shares of participants
-    let pubkey_shares =
-        subproductdomain::fast_multiexp(&evals.evals, g.into_projective());
-    let pubkey_share = g.mul(evals.evals[0]);
-    debug_assert!(pubkey_shares[0] == E::G1Affine::from(pubkey_share));
-
-    // Y, but only when b = 1 - private key shares of participants
-    let privkey_shares =
-        subproductdomain::fast_multiexp(&evals.evals, h.into_projective());
-
-    // a_0
-    let x = threshold_poly.coeffs[0];
-
-    // F_0 - The commitment to the constant term, and is the public key output Y from PVDKG
-    let pubkey = g.mul(x);
-    let privkey = h.mul(x);
 
     let mut private_contexts = vec![];
     let mut public_contexts = vec![];
@@ -161,12 +157,12 @@ pub fn setup_fast<E: PairingEngine>(
                 b,
                 b_inv: b.inverse().unwrap(),
                 g,
+                h_inv: E::G2Prepared::from(-h),
                 g_inv: E::G1Prepared::from(-g),
                 h,
             },
             private_key_share,
             public_decryption_contexts: vec![],
-            scalar_bits,
         });
         public_contexts.push(PublicDecryptionContextFast::<E> {
             domain: *domain,
@@ -210,14 +206,12 @@ pub fn setup_simple<E: PairingEngine>(
     let shares_x = fft_domain.elements().collect::<Vec<_>>();
 
     // A - public key shares of participants
-    let pubkey_shares =
-        subproductdomain::fast_multiexp(&evals.evals, g.into_projective());
+    let pubkey_shares = fast_multiexp(&evals.evals, g.into_projective());
     let pubkey_share = g.mul(evals.evals[0]);
     debug_assert!(pubkey_shares[0] == E::G1Affine::from(pubkey_share));
 
     // Y, but only when b = 1 - private key shares of participants
-    let privkey_shares =
-        subproductdomain::fast_multiexp(&evals.evals, h.into_projective());
+    let privkey_shares = fast_multiexp(&evals.evals, h.into_projective());
 
     // a_0
     let x = threshold_poly.coeffs[0];
@@ -247,6 +241,7 @@ pub fn setup_simple<E: PairingEngine>(
                 b,
                 b_inv: b.inverse().unwrap(),
                 g,
+                h_inv: E::G2Prepared::from(-h),
                 g_inv: E::G1Prepared::from(-g),
                 h,
             },
@@ -274,12 +269,13 @@ pub fn setup_simple<E: PairingEngine>(
 #[cfg(test)]
 mod tests {
     use crate::*;
-    use ark_bls12_381::{Fr, G1Affine};
+    use ark_bls12_381::Fr;
     use ark_ec::ProjectiveCurve;
     use ark_ff::BigInteger256;
     use ark_std::test_rng;
     use itertools::Itertools;
     use rand::prelude::StdRng;
+    use std::collections::HashMap;
     use std::ops::Mul;
 
     type E = ark_bls12_381::Bls12_381;
@@ -488,15 +484,10 @@ mod tests {
             .map(|c| c.create_share(&ciphertext, aad).unwrap())
             .collect();
 
-        let domain = contexts[0]
-            .public_decryption_contexts
-            .iter()
-            .map(|c| c.domain)
-            .collect::<Vec<_>>();
-        let lagrange = prepare_combine_simple::<E>(&domain);
-
-        let shared_secret =
-            share_combine_simple::<E>(&decryption_shares, &lagrange);
+        let shared_secret = make_shared_secret(
+            &contexts[0].public_decryption_contexts,
+            &decryption_shares,
+        );
 
         test_ciphertext_validation_fails(
             msg,
@@ -578,7 +569,7 @@ mod tests {
         assert!(verify_decryption_shares_simple(
             pub_contexts,
             &ciphertext,
-            &decryption_shares
+            &decryption_shares,
         ));
 
         // Now, let's test that verification fails if we one of the decryption shares is invalid.
@@ -608,9 +599,9 @@ mod tests {
         ));
     }
 
-    #[test]
     /// Ñ parties (where t <= Ñ <= N) jointly execute a "share recovery" algorithm, and the output is 1 new share.
     /// The new share is intended to restore a previously existing share, e.g., due to loss or corruption.
+    #[test]
     fn simple_threshold_decryption_with_share_recovery_at_selected_point() {
         let rng = &mut test_rng();
         let shares_num = 16;
@@ -628,23 +619,66 @@ mod tests {
             .last()
             .unwrap()
             .domain;
-        let original_y_r =
-            selected_participant.private_key_share.private_key_share;
+        let original_private_key_share = selected_participant.private_key_share;
 
-        // Now, we have to remove the participant from the contexts and all nested structures
+        // Remove one participant from the contexts and all nested structures
         let mut remaining_participants = contexts;
         for p in &mut remaining_participants {
-            p.public_decryption_contexts.pop();
+            p.public_decryption_contexts.pop().unwrap();
         }
 
-        // Recover the share
-        let y_r = recover_share_at_point(
-            &remaining_participants,
-            threshold,
+        // Each participant prepares an update for each other participant
+        let domain_points = remaining_participants[0]
+            .public_decryption_contexts
+            .iter()
+            .map(|c| c.domain)
+            .collect::<Vec<_>>();
+        let h = remaining_participants[0].public_decryption_contexts[0].h;
+        let share_updates = remaining_participants
+            .iter()
+            .map(|p| {
+                let deltas_i = prepare_share_updates_for_recovery::<E>(
+                    &domain_points,
+                    &h,
+                    &x_r,
+                    threshold,
+                    rng,
+                );
+                (p.index, deltas_i)
+            })
+            .collect::<HashMap<_, _>>();
+
+        // Participants share updates and update their shares
+        let new_share_fragments: Vec<_> = remaining_participants
+            .iter()
+            .map(|p| {
+                // Current participant receives updates from other participants
+                let updates_for_participant: Vec<_> = share_updates
+                    .values()
+                    .map(|updates| *updates.get(p.index).unwrap())
+                    .collect();
+
+                // And updates their share
+                update_share_for_recovery::<E>(
+                    &p.private_key_share,
+                    &updates_for_participant,
+                )
+            })
+            .collect();
+
+        // Now, we have to combine new share fragments into a new share
+        let domain_points = &remaining_participants[0]
+            .public_decryption_contexts
+            .iter()
+            .map(|ctxt| ctxt.domain)
+            .collect::<Vec<_>>();
+        let new_private_key_share = recover_share_from_updated_private_shares(
             &x_r,
-            rng,
+            domain_points,
+            &new_share_fragments,
         );
-        assert_eq!(y_r.into_affine(), original_y_r);
+
+        assert_eq!(new_private_key_share, original_private_key_share);
     }
 
     fn make_shared_secret_from_contexts<E: PairingEngine>(
@@ -672,19 +706,9 @@ mod tests {
         share_combine_simple::<E>(decryption_shares, &lagrange)
     }
 
-    fn make_decryption_share<E: PairingEngine>(
-        private_share: &PrivateKeyShare<E>,
-        ciphertext: &Ciphertext<E>,
-    ) -> E::Fqk {
-        let z_i = private_share;
-        let u = ciphertext.commitment;
-        let z_i = z_i.private_key_share;
-        E::pairing(u, z_i)
-    }
-
-    #[test]
     /// Ñ parties (where t <= Ñ <= N) jointly execute a "share recovery" algorithm, and the output is 1 new share.
     /// The new share is independent from the previously existing shares. We can use this to on-board a new participant into an existing cohort.
+    #[test]
     fn simple_threshold_decryption_with_share_recovery_at_random_point() {
         let rng = &mut test_rng();
         let shares_num = 16;
@@ -707,6 +731,9 @@ mod tests {
 
         // Now, we're going to recover a new share at a random point and check that the shared secret is still the same
 
+        // Our random point
+        let x_r = Fr::rand(rng);
+
         // Remove one participant from the contexts and all nested structures
         let mut remaining_participants = contexts.clone();
         let removed_participant = remaining_participants.pop().unwrap();
@@ -714,32 +741,77 @@ mod tests {
             p.public_decryption_contexts.pop().unwrap();
         }
 
-        // Recover the share
-        let x_r = Fr::rand(rng);
-        let y_r = recover_share_at_point(
-            &remaining_participants,
-            threshold,
-            &x_r,
-            rng,
-        );
-        let recovered_key_share = PrivateKeyShare {
-            private_key_share: y_r.into_affine(),
-        };
+        // Each participant prepares an update for each other participant
+        let domain_points = remaining_participants[0]
+            .public_decryption_contexts
+            .iter()
+            .map(|c| c.domain)
+            .collect::<Vec<_>>();
+        let h = remaining_participants[0].public_decryption_contexts[0].h;
+        let share_updates = remaining_participants
+            .iter()
+            .map(|p| {
+                let deltas_i = prepare_share_updates_for_recovery::<E>(
+                    &domain_points,
+                    &h,
+                    &x_r,
+                    threshold,
+                    rng,
+                );
+                (p.index, deltas_i)
+            })
+            .collect::<HashMap<_, _>>();
 
-        // Creating decryption shares
+        // Participants share updates and update their shares
+        let new_share_fragments: Vec<_> = remaining_participants
+            .iter()
+            .map(|p| {
+                // Current participant receives updates from other participants
+                let updates_for_participant: Vec<_> = share_updates
+                    .values()
+                    .map(|updates| *updates.get(p.index).unwrap())
+                    .collect();
+
+                // And updates their share
+                update_share_for_recovery::<E>(
+                    &p.private_key_share,
+                    &updates_for_participant,
+                )
+            })
+            .collect();
+
+        // Now, we have to combine new share fragments into a new share
+        let domain_points = &remaining_participants[0]
+            .public_decryption_contexts
+            .iter()
+            .map(|ctxt| ctxt.domain)
+            .collect::<Vec<_>>();
+        let new_private_key_share = recover_share_from_updated_private_shares(
+            &x_r,
+            domain_points,
+            &new_share_fragments,
+        );
+
+        // Get decryption shares from remaining participants
         let mut decryption_shares: Vec<_> = remaining_participants
             .iter()
             .map(|c| c.create_share(&ciphertext, aad).unwrap())
             .collect();
-        decryption_shares.push(DecryptionShareSimple {
-            decrypter_index: removed_participant.index,
-            decryption_share: make_decryption_share(
-                &recovered_key_share,
+
+        // Create a decryption share from a recovered private key share
+        let new_validator_decryption_key = Fr::rand(rng);
+        let validator_index = removed_participant.index;
+        decryption_shares.push(
+            DecryptionShareSimple::create(
+                validator_index,
+                &new_validator_decryption_key,
+                &new_private_key_share,
                 &ciphertext,
-            ),
-            // TODO: Implement a method to make a proper decryption share after refreshing
-            validator_checksum: G1Affine::zero(),
-        });
+                aad,
+                g_inv,
+            )
+            .unwrap(),
+        );
 
         // Creating a shared secret from remaining shares and the recovered one
         let new_shared_secret = make_shared_secret(
@@ -777,25 +849,33 @@ mod tests {
 
         // Now, we're going to refresh the shares and check that the shared secret is the same
 
-        // Refresh shares
-        let new_shares = refresh_shares::<E>(&contexts, threshold, rng);
+        // Dealer computes a new random polynomial with constant term x_r
+        let polynomial =
+            make_random_polynomial_at::<E>(threshold, &Fr::zero(), rng);
 
-        // Creating new decryption shares
-        let new_decryption_shares: Vec<_> = new_shares
+        // Dealer shares the polynomial with participants
+
+        // Participants computes new decryption shares
+        let new_decryption_shares: Vec<_> = contexts
             .iter()
             .enumerate()
-            .map(|(decrypter_index, private_share)| {
-                let private_share = PrivateKeyShare {
-                    private_key_share: private_share.into_affine(),
-                };
-                let decryption_share =
-                    make_decryption_share(&private_share, &ciphertext);
-                DecryptionShareSimple {
-                    decrypter_index,
-                    decryption_share,
-                    // TODO: Implement a method to make a proper decryption share after refreshing
-                    validator_checksum: G1Affine::zero(),
-                }
+            .map(|(i, p)| {
+                // Participant computes share updates and update their private key shares
+                let private_key_share = refresh_private_key_share::<E>(
+                    &p.setup_params.h.into_projective(),
+                    &p.public_decryption_contexts[i].domain,
+                    &polynomial,
+                    &p.private_key_share,
+                );
+                DecryptionShareSimple::create(
+                    p.index,
+                    &p.validator_private_key,
+                    &private_key_share,
+                    &ciphertext,
+                    aad,
+                    g_inv,
+                )
+                .unwrap()
             })
             .collect();
 

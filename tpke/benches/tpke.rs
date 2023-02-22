@@ -1,6 +1,9 @@
 #![allow(clippy::redundant_closure)]
 
 use ark_bls12_381::{Fr, G1Affine, G2Affine};
+use ark_ec::AffineCurve;
+use ark_ff::Zero;
+use std::collections::HashMap;
 
 use criterion::{
     black_box, criterion_group, criterion_main, BenchmarkId, Criterion,
@@ -459,8 +462,7 @@ pub fn bench_decryption_share_validity_checks(c: &mut Criterion) {
 }
 
 pub fn bench_recover_share_at_point(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Recover Share at Point Benchmark");
-    // Set up test conditions
+    let mut group = c.benchmark_group("RECOVER SHARE");
     let rng = &mut StdRng::seed_from_u64(0);
     let msg_size = MSG_SIZE_CASES[0];
 
@@ -477,17 +479,55 @@ pub fn bench_recover_share_at_point(c: &mut Criterion) {
         for p in &mut remaining_participants {
             p.public_decryption_contexts.pop();
         }
+        let domain_points = &remaining_participants[0]
+            .public_decryption_contexts
+            .iter()
+            .map(|ctxt| ctxt.domain)
+            .collect::<Vec<_>>();
+        let h = remaining_participants[0].public_decryption_contexts[0].h;
+        let share_updates = remaining_participants
+            .iter()
+            .map(|p| {
+                let deltas_i = prepare_share_updates_for_recovery::<E>(
+                    domain_points,
+                    &h,
+                    &x_r,
+                    threshold,
+                    rng,
+                );
+                (p.index, deltas_i)
+            })
+            .collect::<HashMap<_, _>>();
+        let new_share_fragments: Vec<_> = remaining_participants
+            .iter()
+            .map(|p| {
+                // Current participant receives updates from other participants
+                let updates_for_participant: Vec<_> = share_updates
+                    .values()
+                    .map(|updates| *updates.get(p.index).unwrap())
+                    .collect();
+
+                // And updates their share
+                update_share_for_recovery::<E>(
+                    &p.private_key_share,
+                    &updates_for_participant,
+                )
+            })
+            .collect();
         group.bench_function(
-            BenchmarkId::new("Recover Share at Point", shares_num),
+            BenchmarkId::new(
+                "recover_share_from_updated_private_shares",
+                shares_num,
+            ),
             |b| {
-                let mut rng = rand::rngs::StdRng::seed_from_u64(0);
                 b.iter(|| {
-                    let _ = black_box(recover_share_at_point::<E>(
-                        &remaining_participants[..shares_num - 1],
-                        threshold,
-                        &x_r,
-                        &mut rng,
-                    ));
+                    let _ = black_box(
+                        recover_share_from_updated_private_shares::<E>(
+                            &x_r,
+                            domain_points,
+                            &new_share_fragments,
+                        ),
+                    );
                 });
             },
         );
@@ -495,23 +535,25 @@ pub fn bench_recover_share_at_point(c: &mut Criterion) {
 }
 
 pub fn bench_refresh_shares(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Refresh Shares Benchmark");
-    // Set up test conditions
+    let mut group = c.benchmark_group("REFRESH SHARES");
     let rng = &mut StdRng::seed_from_u64(0);
     let msg_size = MSG_SIZE_CASES[0];
 
     for &shares_num in NUM_SHARES_CASES.iter() {
         let setup = SetupSimple::new(shares_num, msg_size, rng);
         let threshold = setup.shared.threshold;
+        let polynomial =
+            make_random_polynomial_at::<E>(threshold, &Fr::zero(), rng);
+        let p = setup.contexts[0].clone();
         group.bench_function(
-            BenchmarkId::new("Refresh Shares", shares_num),
+            BenchmarkId::new("refresh_private_key_share", shares_num),
             |b| {
-                let mut rng = rand::rngs::StdRng::seed_from_u64(0);
                 b.iter(|| {
-                    black_box(refresh_shares::<E>(
-                        &setup.contexts,
-                        threshold,
-                        &mut rng,
+                    black_box(refresh_private_key_share::<E>(
+                        &p.setup_params.h.into_projective(),
+                        &p.public_decryption_contexts[0].domain,
+                        &polynomial,
+                        &p.private_key_share,
                     ));
                 });
             },

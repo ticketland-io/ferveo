@@ -161,10 +161,10 @@ pub fn checked_decrypt_with_shared_secret<E: PairingEngine>(
     ciphertext: &Ciphertext<E>,
     aad: &[u8],
     g_inv: &E::G1Prepared,
-    s: &E::Fqk,
+    shared_secret: &E::Fqk,
 ) -> Result<Vec<u8>> {
     check_ciphertext_validity(ciphertext, aad, g_inv)?;
-    Ok(decrypt_with_shared_secret(ciphertext, s))
+    Ok(decrypt_with_shared_secret(ciphertext, shared_secret))
 }
 
 fn sha256(input: &[u8]) -> Vec<u8> {

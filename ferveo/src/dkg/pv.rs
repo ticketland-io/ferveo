@@ -24,7 +24,7 @@ pub struct PubliclyVerifiableDkg<E: PairingEngine> {
 impl<E: PairingEngine> PubliclyVerifiableDkg<E> {
     /// Create a new DKG context to participate in the DKG
     /// Every identity in the DKG is linked to an ed25519 public key;
-    /// `validatorst`: List of validators
+    /// `validators`: List of validators
     /// `params` contains the parameters of the DKG such as number of shares
     /// `me` the validator creating this instance
     /// `session_keypair` the keypair for `me`

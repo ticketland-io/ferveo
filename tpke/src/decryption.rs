@@ -47,7 +47,7 @@ pub struct DecryptionShareSimple<E: PairingEngine> {
 impl<E: PairingEngine> DecryptionShareSimple<E> {
     pub fn create(
         validator_index: usize,
-        validator_private_key: &E::Fr,
+        validator_decryption_key: &E::Fr,
         private_key_share: &PrivateKeyShare<E>,
         ciphertext: &Ciphertext<E>,
         aad: &[u8],
@@ -55,7 +55,7 @@ impl<E: PairingEngine> DecryptionShareSimple<E> {
     ) -> Result<DecryptionShareSimple<E>> {
         check_ciphertext_validity::<E>(ciphertext, aad, g_inv)?;
 
-        // C_i = e(U, Z_i)
+        // D_i = e(U, Z_i)
         let decryption_share = E::pairing(
             ciphertext.commitment,
             private_key_share.private_key_share,
@@ -64,7 +64,7 @@ impl<E: PairingEngine> DecryptionShareSimple<E> {
         // C_i = dk_i^{-1} * U
         let validator_checksum = ciphertext
             .commitment
-            .mul(validator_private_key.inverse().unwrap())
+            .mul(validator_decryption_key.inverse().unwrap())
             .into_affine();
 
         Ok(DecryptionShareSimple {
