@@ -99,7 +99,7 @@ impl<E: PairingEngine> DecryptionShareSimple<E> {
 
         true
     }
-}
+  }
 
 // TODO: Remove this code? Currently only used in benchmarks.
 pub fn batch_verify_decryption_shares<R: RngCore, E: PairingEngine>(
