@@ -41,6 +41,8 @@ impl<E: PairingEngine> Ciphertext<E> {
         let mut bytes = Vec::new();
         self.commitment.write(&mut bytes).unwrap();
         self.auth_tag.write(&mut bytes).unwrap();
+        self.ciphertext.write(&mut bytes).unwrap();
+        
         bytes
     }
 
