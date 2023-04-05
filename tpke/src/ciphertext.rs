@@ -7,7 +7,7 @@ use chacha20poly1305::{
     aead::{generic_array::GenericArray, Aead, KeyInit},
     ChaCha20Poly1305, Nonce,
 };
-use crypto::{digest::Digest, sha2::Sha256};
+use sha2::{Sha256, Digest};
 use rand_core::RngCore;
 
 use crate::{construct_tag_hash, hash_to_g2};
@@ -172,8 +172,8 @@ pub fn checked_decrypt_with_shared_secret<E: PairingEngine>(
 fn sha256(input: &[u8]) -> Vec<u8> {
     let mut result = [0u8; 32];
     let mut hasher = Sha256::new();
-    hasher.input(input);
-    hasher.result(&mut result);
+    hasher.update(input);
+    hasher.update(&mut result);
     result.to_vec()
 }
 
